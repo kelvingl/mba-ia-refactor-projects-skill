@@ -446,3 +446,43 @@ A skill deve atingir os seguintes mínimos em **todos os 3 projetos**:
 - **Projetos diferentes exigem adaptação** — a Fase 3 de um projeto já parcialmente organizado não vai ter as mesmas transformações de um monolito. Sua skill deve se adaptar ao contexto.
 - **Pedir confirmação na Fase 2 é obrigatório** — o humano deve revisar o relatório antes de qualquer modificação.
 - **Consulte as referências do curso** — revise a documentação oficial da ferramenta escolhida e os materiais das aulas para relembrar a estrutura e anatomia de uma skill.
+
+
+# Resolução do desafio
+
+Abaixo a documentação da resolução. A parte acimna faz parte do README original
+
+## Análise manual
+
+Detecções feitas manualmente, com base na leitura do código. 
+
+### Projeto `code-smeels-project`
+| # | Problema                                                 | Severidade | Linha                                        |
+| - | -------------------------------------------------------- | ---------- | -------------------------------------------- |
+| 1 | Secret hardcoded                                         | CRITICAL   | `app.py:7`                                   |
+| 2 | Retorno de dados sensíveis ao cliente                    | CRITICAL   | `controllers.py:289`; `models.py:83, 99`      |
+| 3 | SQLInjection possível em quase todos os metodos da model | CRITICAL   | `models.py:28,47-50,57-61,68,92,109-111,...` |
+| 4 | Validação duplicada de produtos                          | MEDIUM     | `controllers.py:24-96`                       |
+| 5 | Query N+1 (em for)                                       | MEDIUM     | `models.py:171-201,203-233`                  |
+| 6 | Magic numbers                                            | LOW        | `models.py:256-262`                          |
+| 7 | Concatenação manual de string para mensagem              | LOW        | `controllers.py:8,11,57,106,161,179,208-210` |
+
+### Projeto `ecommerce-api-legacy`
+| # | Problema                                                   | Severidade | Linha                    |
+| - | ---------------------------------------------------------- | ---------- | ------------------------ |
+| 1 | Segredos hardcoded                                         | CRITICAL   | `utils.js:1-7`           |
+| 2 | God Class concentrando regra de negócio, db e rotas        | CRITICAL   | `AppManager.js:4-141`    |
+| 3 | Query N+1 (em for)                                         | MEDIUM     | `AppManager.js:83-126`   |
+| 4 | Sem error handler; falta padronização de respostas de erro | MEDIUM     | `app.js`; `AppManager.js` |
+| 5 | Banco de dados em memória                                  | LOW        | `AppManager.js:7`        |
+| 6 | Log do número do cartão                                    | LOW        | `AppManager.js:45`       |
+
+### Projeto `task-manager-api`
+| # | Problema                                                     | Severidade | Linha                                                  |
+| - | ------------------------------------------------------------ | ---------- | ------------------------------------------------------ |
+| 1 | Segredos hardcoded                                           | CRITICAL   | `app.py:13`; `notification_service.py:9-10`            |
+| 2 | Retorno de dados sensíveis ao cliente                        | CRITICAL   | `user.py:17-25` + várias rotas                         |
+| 3 | Regra  de validação "overdue" duplicada                      | MEDIUM     | `report_routes.py`; `task_routes.py`; `user_routes.py` |
+| 4 | Query N+1 (em for)                                           | MEDIUM     | `task_routes.py:41-57`; `report_routes.py:53-68`       |
+| 5 | Código não usado `generate_id`, `process_task_data`          | LOW        | `helpers.py`                                           |
+| 6 | Comparação de tipo com type(x) == 'str' em vez de isinstance | LOW        | `task_routes.py:141,210`; `helpers.py:103`             |
