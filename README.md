@@ -452,7 +452,34 @@ A skill deve atingir os seguintes mínimos em **todos os 3 projetos**:
 
 Abaixo a documentação da resolução. A parte acimna faz parte do README original
 
-## Análise manual
+## Checklist de Validação
+
+### Fase 1 — Análise
+- [ ] Linguagem detectada corretamente
+- [ ] Framework detectado corretamente
+- [ ] Domínio da aplicação descrito corretamente
+- [ ] Número de arquivos analisados condiz com a realidade
+
+### Fase 2 — Auditoria
+- [ ] Relatório segue o template definido nos arquivos de referência
+- [ ] Cada finding tem arquivo e linhas exatos
+- [ ] Findings ordenados por severidade (CRITICAL → LOW)
+- [ ] Mínimo de 5 findings identificados
+- [ ] Detecção de APIs deprecated incluída (se aplicável)
+- [ ] Skill pausa e pede confirmação antes da Fase 3
+
+### Fase 3 — Refatoração
+- [ ] Estrutura de diretórios segue padrão MVC
+- [ ] Configuração extraída para módulo de config (sem hardcoded)
+- [ ] Models criados para abstrair dados
+- [ ] Views/Routes separadas para visualização ou roteamento
+- [ ] Controllers concentram o fluxo da aplicação
+- [ ] Error handling centralizado
+- [ ] Entry point claro
+- [ ] Aplicação inicia sem erros
+- [ ] Endpoints originais respondem corretamente
+
+## 1. Análise manual
 
 Detecções feitas manualmente, com base na leitura do código. 
 
@@ -460,29 +487,155 @@ Detecções feitas manualmente, com base na leitura do código.
 | # | Problema                                                 | Severidade | Linha                                        |
 | - | -------------------------------------------------------- | ---------- | -------------------------------------------- |
 | 1 | Secret hardcoded                                         | CRITICAL   | `app.py:7`                                   |
-| 2 | Retorno de dados sensíveis ao cliente                    | CRITICAL   | `controllers.py:289`; `models.py:83, 99`      |
+| 2 | Retorno de dados sensíveis ao cliente                    | CRITICAL   | `controllers.py:289`; `models.py:83, 99`     |
 | 3 | SQLInjection possível em quase todos os metodos da model | CRITICAL   | `models.py:28,47-50,57-61,68,92,109-111,...` |
-| 4 | Validação duplicada de produtos                          | MEDIUM     | `controllers.py:24-96`                       |
-| 5 | Query N+1 (em for)                                       | MEDIUM     | `models.py:171-201,203-233`                  |
-| 6 | Magic numbers                                            | LOW        | `models.py:256-262`                          |
-| 7 | Concatenação manual de string para mensagem              | LOW        | `controllers.py:8,11,57,106,161,179,208-210` |
+| 4 | Sem tratamento de erro centralizado, falta padronização  | HIGH       | `controllers.py` (várias funções)            |
+| 5 | Validação duplicada de produtos                          | MEDIUM     | `controllers.py:24-96`                       |
+| 6 | Query N+1 (em for)                                       | MEDIUM     | `models.py:171-201,203-233`                  |
+| 7 | Magic numbers                                            | LOW        | `models.py:256-262`                          |
+| 8 | Concatenação manual de string para mensagem              | LOW        | `controllers.py:8,11,57,106,161,179,208-210` |
 
 ### Projeto `ecommerce-api-legacy`
-| # | Problema                                                   | Severidade | Linha                    |
-| - | ---------------------------------------------------------- | ---------- | ------------------------ |
-| 1 | Segredos hardcoded                                         | CRITICAL   | `utils.js:1-7`           |
-| 2 | God Class concentrando regra de negócio, db e rotas        | CRITICAL   | `AppManager.js:4-141`    |
-| 3 | Query N+1 (em for)                                         | MEDIUM     | `AppManager.js:83-126`   |
-| 4 | Sem error handler; falta padronização de respostas de erro | MEDIUM     | `app.js`; `AppManager.js` |
-| 5 | Banco de dados em memória                                  | LOW        | `AppManager.js:7`        |
-| 6 | Log do número do cartão                                    | LOW        | `AppManager.js:45`       |
+| # | Problema                                                   | Severidade | Linha                                  |
+| - | ---------------------------------------------------------- | ---------- | -------------------------------------- |
+| 1 | Segredos hardcoded                                         | CRITICAL   | `utils.js:1-7`                         |
+| 2 | God Class concentrando regra de negócio, db e rotas        | CRITICAL   | `AppManager.js:4-141`                  |
+| 3 | Sem error handler; falta padronização de respostas de erro | HIGH       | `app.js`; `AppManager.js`              |
+| 4 | Query N+1 (em for)                                         | MEDIUM     | `AppManager.js:83-126`                 |
+| 5 | Estado global mutável sem sincronização                    | MEDIUM     | `utils.js:9-10,`; `AppManager.js:2,59` |
+| 6 | Banco de dados em memória                                  | LOW        | `AppManager.js:7`                      |
+| 7 | Log do número do cartão                                    | LOW        | `AppManager.js:45`                     |
 
 ### Projeto `task-manager-api`
 | # | Problema                                                     | Severidade | Linha                                                  |
 | - | ------------------------------------------------------------ | ---------- | ------------------------------------------------------ |
 | 1 | Segredos hardcoded                                           | CRITICAL   | `app.py:13`; `notification_service.py:9-10`            |
 | 2 | Retorno de dados sensíveis ao cliente                        | CRITICAL   | `user.py:17-25` + várias rotas                         |
-| 3 | Regra  de validação "overdue" duplicada                      | MEDIUM     | `report_routes.py`; `task_routes.py`; `user_routes.py` |
-| 4 | Query N+1 (em for)                                           | MEDIUM     | `task_routes.py:41-57`; `report_routes.py:53-68`       |
-| 5 | Código não usado `generate_id`, `process_task_data`          | LOW        | `helpers.py`                                           |
-| 6 | Comparação de tipo com type(x) == 'str' em vez de isinstance | LOW        | `task_routes.py:141,210`; `helpers.py:103`             |
+| 3 | Sem error handler centralizado, falta padronização           | HIGH       | `task_routes.py` (várias funções)                      |
+| 4 | Regra  de validação "overdue" duplicada                      | MEDIUM     | `report_routes.py`; `task_routes.py`; `user_routes.py` |
+| 5 | Query N+1 (em for)                                           | MEDIUM     | `task_routes.py:41-57`; `report_routes.py:53-68`       |
+| 6 | Código não usado `generate_id`, `process_task_data`          | LOW        | `helpers.py`                                           |
+| 7 | Comparação de tipo com type(x) == 'str' em vez de isinstance | LOW        | `task_routes.py:141,210`; `helpers.py:103`             |
+
+## 2. Desenvolvimento da skill
+
+### Princípios arquiteturais aplicados
+
+**Validação pós-transformação no pipeline.** A Fase 3 conclui-se com steps de verificação: boot da aplicação, curl em 2-3 endpoints originais, encerramento do servidor. Isso evita o cenário em que refatoração parece completa mas deixa a aplicação quebrada.
+
+**Playbook com exemplos bilíngues.** O arquivo de estratégias de refatoração inclui transformações lado-a-lado em Python e Node.js para cada anti-pattern crítico, garantindo que a skill saiba como agir independentemente da linguagem-alvo.
+
+**Detecção orientada por sinais precisos.** Ao invés de usar heurísticas vagas como "procure por código ruim", o catálogo lista exatamente o que buscar: patterns de regex, chamadas de função específicas, estruturas de diretório. Isso reduz o espaço de interpretação do modelo.
+
+**Pausa explícita e confirmação obrigatória.** Entre a Fase 2 (auditoria) e a Fase 3 (refatoração), o SKILL.md emite uma string literal de pausa — `Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]` — e aguarda resposta. Nenhuma modificação de código ocorre sem consentimento do usuário.
+
+**Separação entre orquestração e conhecimento.** O SKILL.md mantém-se enxuto, focando em decisões procedurais: quais fases executar, quando pausar, qual referência consultar em cada momento. Os arquivos em `references/` concentram conteúdo factual — catálogo de problemas, templates, exemplos código — evitando inflação do contexto inicial.
+
+### Agnóstica de tecnologia — mecanismo de execução
+
+A skill consegue funcionar em 3 stacks diferentes através de 4 camadas de adaptação:
+
+1. **Diretrizes MVC descritivas, não prescritivas.** O arquivo `mvc-guidelines.md` foca em responsabilidades (Models: abstraem dados; Controllers: orquestram fluxo; Routes: mapeiam HTTP), não em nomes de arquivo rígidos. Permite que projeto Python use `models/produto.py` e Node use `models/Product.js` — os princípios valem para os dois.
+
+2. **Exemplos de código em ambos idiomas.** O playbook apresenta transformação idêntica em sintaxe Python e Node lado-a-lado, evitando ambiguidades.
+
+3. **Detecção de linguagem em layers.** O arquivo `project-analysis.md` implementa uma cascata: manifesto (requirements.txt → Python, package.json → Node, pom.xml → Java), depois framework (imports/requires), depois banco (drivers), fallback para extensão de arquivo.
+
+4. **Sinais grep-ables multilíngues.** O catálogo lista padrões de busca em múltiplas sintaxes. Ex.: SQL Injection mapeia `cursor.execute("..." + var)` (Python) e template literals `SELECT ... ${id}` (Node).
+
+### Arquitetura e composição da skill
+
+A skill `refactor-arch` foi organizada em uma estrutura modular, com o arquivo principal `SKILL.md` e um conjunto de referências que fornecem conhecimento de domínio profundo:
+
+```
+.claude/skills/refactor-arch/
+├── SKILL.md                              # Orquestração das 3 fases (análise → auditoria → refatoração)
+└── references/
+    ├── project-analysis.md               # Heurísticas para identificar linguagem, framework e banco
+    ├── anti-patterns-catalog.md          # 23 anti-patterns distribuídos em severidades + 8 APIs deprecated
+    ├── report-template.md                # Estrutura padronizada para saída da Fase 2
+    ├── mvc-guidelines.md                 # Padrão MVC alvo e responsabilidades por camada
+    └── refactoring-playbook.md           # 14 estratégias de transformação com exemplos antes/depois
+```
+
+A skill é criada originalmente em `code-smells-project/.claude/skills/refactor-arch/` e distribuída para os demais projetos através de **links simbólicos**. Isso garante uma única fonte de verdade: qualquer atualização no arquivo original é automaticamente refletida em `ecommerce-api-legacy/.claude/skills/refactor-arch/` e `task-manager-api/.claude/skills/refactor-arch/`, evitando duplicação de código e inconsistências entre as três execuções.
+
+### Desafios encontrados e soluções
+
+**Porta 5000 ocupada em macOS.** Durante validação, `localhost:5000` já estava em uso (AirPlay Receiver). Solução: documentar fallback `PORT=5055` e sugerir verificação com `lsof -i :5000`.
+
+**Detecção falha no Projeto 3.** Por já ter `models/` e `routes/`, poderia ser classificado como "já MVC, pule refatoração". Solução: adicionar categoria intermediária ("Parcialmente organizada, com violações") e regra: ter pastas não basta; precisa haver separação real de responsabilidades.
+
+**Pausa fraca entre fases.** O primeiro rascunho do SKILL.md era ambíguo sobre a obrigatoriedade de parar antes da refatoração. Solução: emitir uma string exata e formatada, com instruções em negrito para o agente parar e não continuar.
+
+**Over-engineering em Fase 3.** Primeira tentativa incluía Repository Pattern + Unit of Work + DI container — muito para projetos de 4 endpoints. Solução: documentar explicitamente no `mvc-guidelines.md`: "não criar `services/` sem necessidade; não inventar camadas que não rodam lógica."
+
+### Catálogo de anti-patterns — cobertura e severidades
+
+O catálogo contém **23 anti-patterns** distribuídos em 4 níveis de severidade, além de **8 APIs deprecated** que merecem flagging especial:
+
+**CRITICAL (6 itens):**
+- Debug mode ativado em produção
+- Endpoint de SQL arbitrária (sem validação)
+- God Class (arquivo único com DB, lógica, e rotas)
+- Passwords em plaintext ou hash fraco (MD5, SHA1)
+- Credenciais hardcoded ("SECRET_KEY =", chaves em variáveis)
+- SQL Injection (SQL direto concatenado)
+
+**HIGH (6 itens):**
+- Autenticação fraca ou ausente
+- Integridade referencial quebrada (foreign keys sem constraint)
+- Ausência de centralização de tratamento de erros
+- Callback Hell (promises aninhadas, chained callbacks)
+- Estado global mutável sem encapsulamento
+- Lógica de negócio prisioneira em rotas/controllers
+
+**MEDIUM (6 itens):**
+- Validação de input ausente nas rotas
+- Serialização inconsistente (alguns objetos retornam IDs, outros nomes)
+- `except:` nú (capturando Exception genérica)
+- Falta de paginação em endpoints que retornam listas
+- Validação duplicada entre camadas
+- Queries N+1 (sem JOIN, loop de selects)
+
+**LOW (5 itens):**
+- Comparação de tipo usando `type(x) == list`
+- Concatenação manual de strings em mensagens de erro
+- Print statements para logging
+- Nomes de variáveis confusos ou genéricos
+- Magic numbers soltos no código
+
+**APIs Deprecated (8):**
+- Versões antigas de Flask-SQLAlchemy
+- `utcnow()` como default em coluna de timestamp
+- `SQLALCHEMY_TRACK_MODIFICATIONS` não configurado
+- `body-parser` legacy em Express
+- `datetime.strptime()` nú sem tz awareness
+- `request.get_json()` sem `silent=True`
+- SQLite3 com callbacks (padrão antigo)
+- `datetime.utcnow()` (usar `now(timezone.utc)`)
+
+**Motivo dessa seleção:** foram os anti-patterns reais encontrados durante análise manual dos 3 projetos. Juntos, cobrem as 4 severidades com margem, e os deprecated APIs ajudam a surfar dívidas técnicas silenciosas (ex.: `datetime.utcnow()` aparecia 13 vezes no Projeto 3 sem aviso óbvio).
+
+### Playbook de refatoração — padrões de transformação
+
+O arquivo `refactoring-playbook.md` contém **14 padrões** (PB-1 a PB-14) que cobrem as transformações mais críticas:
+
+- Substituição de print por logger estruturado
+- Movimentação de validação para schemas/constantes
+- Atualização de `datetime.utcnow()` para timezone-aware
+- Enforcement de integridade referencial com cascata/serviço
+- Estado global → Factory pattern
+- Centralização de try/except em error handler global
+- Conversão de N+1 queries em JOINs
+- Transformação de callback hell em async/await
+- Elevação de lógica de rota para controller
+- Decomposição de God Class em camadas (models, controllers, services)
+- Hash forte + omissão de senhas em responses
+- Substituição de SQL direto por prepared statements
+- Remoção de endpoints de admin arbitrários
+- Extração de config para módulo + variáveis de ambiente
+
+Cada padrão inclui exemplo Python e Node.js (quando aplicável), mostrando estrutura antes/depois.
+
+Agora, com a skill construída e testada, os 3 projetos podem ser refatorados de forma reproduzível e confiável.
