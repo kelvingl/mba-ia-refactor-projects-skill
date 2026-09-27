@@ -805,3 +805,106 @@ A ausência do campo `password`/`hash` na resposta de `/users` confirma a corre�
 - **APIs deprecated são o ponto mais sensível à stack.** No projeto 2, o deprecated é `sqlite3` com API de callback (idiomático de Node antigo); nos projetos 1 e 3 (mesma linguagem), o mesmo padrão de detecção (`datetime.utcnow()`) se repete, mas só o projeto 3 teve ocorrências suficientes para virar finding — o projeto 1 não usa `datetime` na modelagem original.
 - **Profundidade da Fase 3 se adaptou ao ponto de partida.** Nos projetos 1 e 2 (monólitos de 3-4 arquivos), a Fase 3 criou a árvore MVC inteira do zero. No projeto 3, que já tinha `models/`/`routes/`/`services/`/`utils/`, a skill evitou recriar o que já existia — reorganizou apenas o que violava responsabilidades (rotas gordas → controllers, validação solta → schemas) e não caiu na armadilha de classificar "já tem pastas" como "já é MVC" (risco identificado durante o desenvolvimento, ver "Desafios encontrados").
 - **Pausa de confirmação se comportou de forma idêntica nos 3.** A string literal de pausa entre Fase 2 e Fase 3 apareceu sem variação de fraseado nos 3 logs de execução, confirmando que o comportamento não é afetado pela stack-alvo.
+
+## 4. Como Executar
+
+### 4.1 Pré-requisitos
+
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview)** instalado e autenticado (`claude --version` deve funcionar; caso contrário, siga o guia oficial de instalação e rode `claude login`). Foi a ferramenta usada para desenvolver e validar a skill `refactor-arch` neste repositório — os comandos abaixo assumem o CLI da Claude Code.
+- **Python 3.11+** com `pip`, para `code-smells-project/` e `task-manager-api/`.
+- **Node.js 18+** com `npm`, para `ecommerce-api-legacy/`.
+- **git**, para clonar o repositório e commitar os projetos refatorados.
+- `curl` (ou Postman/Insomnia/`api.http` do VS Code REST Client) para validar os endpoints manualmente após a Fase 3.
+
+Nenhum banco externo é necessário — os 3 projetos usam SQLite local, criado/populado automaticamente no boot ou via script de seed.
+
+### 4.2 Comandos para executar a skill em cada projeto
+
+A skill já está copiada em `.claude/skills/refactor-arch/` dentro de cada um dos 3 projetos, então basta entrar na pasta do projeto e invocar `/refactor-arch` com o Claude Code.
+
+**Projeto 1 — `code-smells-project` (Python/Flask)**
+
+```bash
+cd code-smells-project
+pip install -r requirements.txt
+claude "/refactor-arch"
+```
+
+- A Fase 1 imprime linguagem/framework/domínio detectados.
+- A Fase 2 imprime o relatório de auditoria e pausa com `Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]` — responda `y` para prosseguir (o relatório já está salvo em `reports/audit-project-1.md`).
+- A Fase 3 reestrutura o projeto para `src/` (MVC) e valida o boot + endpoints automaticamente.
+
+**Projeto 2 — `ecommerce-api-legacy` (Node.js/Express)**
+
+```bash
+cd ecommerce-api-legacy
+npm install
+claude "/refactor-arch"
+```
+
+- Mesmo fluxo de 3 fases do projeto 1, sem nenhuma alteração na skill — apenas a pasta `.claude/skills/refactor-arch/` foi copiada de `code-smells-project/`.
+- Relatório salvo em `reports/audit-project-2.md`.
+
+**Projeto 3 — `task-manager-api` (Python/Flask, já parcialmente organizado)**
+
+```bash
+cd task-manager-api
+pip install -r requirements.txt
+claude "/refactor-arch"
+```
+
+- A Fase 1 reconhece que já existem `models/`/`routes/`/`services/`/`utils/`, mas a Fase 2 ainda assim identifica violações de responsabilidade dentro dessas pastas (rotas gordas, falhas de segurança).
+- Relatório salvo em `reports/audit-project-3.md`.
+
+> Em todos os 3 casos, **não avance a pausa da Fase 2 sem revisar o relatório** — é o ponto de confirmação obrigatório do desafio.
+
+### 4.3 Como validar que a refatoração funcionou
+
+Após a Fase 3 concluir em cada projeto, valide manualmente subindo a aplicação e chamando os endpoints originais (a skill já faz isso automaticamente no fim da Fase 3, mas pode ser repetido a qualquer momento):
+
+**Projeto 1 — `code-smells-project`**
+
+```bash
+cd code-smells-project
+python app.py
+# em outro terminal:
+curl http://localhost:5000/
+curl http://localhost:5000/produtos
+curl http://localhost:5000/health
+```
+
+Esperado: os 3 endpoints respondem 200; `/health` não deve mais expor `secret_key` nem `debug` (eram os campos vazados antes da refatoração).
+
+**Projeto 2 — `ecommerce-api-legacy`**
+
+```bash
+cd ecommerce-api-legacy
+npm start
+# em outro terminal (ou usando api.http):
+curl -X POST http://localhost:3000/api/checkout -H "Content-Type: application/json" \
+  -d '{"usr":"Teste","eml":"teste@teste.com","pwd":"senha123","c_id":1,"card":"4111111111111111"}'
+curl http://localhost:3000/api/admin/financial-report
+curl -X DELETE http://localhost:3000/api/users/1
+```
+
+Esperado: checkout retorna `{"msg":"Sucesso", ...}`; o log do servidor não deve mais imprimir o número do cartão nem a chave do gateway de pagamento (ambos vazavam via `console.log` antes da refatoração).
+
+**Projeto 3 — `task-manager-api`**
+
+```bash
+cd task-manager-api
+python seed.py    # popula o banco antes do primeiro boot
+python app.py
+# em outro terminal:
+curl http://localhost:5000/tasks
+curl http://localhost:5000/users
+```
+
+Esperado: `/tasks` retorna a lista com `overdue`/`user_name`/`category_name` calculados; `/users` **não deve mais conter** o campo de senha/hash na resposta (vazava o hash MD5 antes da refatoração).
+
+**Checklist geral de validação** (repetir para cada projeto, ver checklist preenchido na seção [3.3](#33-checklist-de-validação-preenchido)):
+
+1. A aplicação sobe sem exceptions no terminal.
+2. Os endpoints documentados no `README.md` original de cada projeto (ou em `api.http`, no caso do projeto 2) continuam respondendo com o mesmo contrato de dados.
+3. Os findings CRITICAL/HIGH do relatório de auditoria (`reports/audit-project-N.md`) não se reproduzem mais — em especial, nenhum segredo hardcoded, nenhuma senha em texto plano/hash fraco retornada em resposta, e `debug`/modo de desenvolvimento não fica implicitamente ligado.
+4. A estrutura de pastas de cada projeto segue o padrão MVC descrito na seção [3.2](#32-comparação-antesdepois-da-estrutura).
