@@ -766,6 +766,8 @@ GET /health           → {"status": "ok", "database": "connected", "ambiente": 
 
 `Debug mode: off` e a ausência dos campos `secret_key`/`debug` no `/health` confirmam a correção dos 2 findings CRITICAL relacionados (antes, `/health` vazava a `SECRET_KEY` e a flag de debug).
 
+![Validação do code-smells-project rodando após a refatoração](reports/code-smells-project/screenshot.png)
+
 **Projeto 2 — `ecommerce-api-legacy`** (`npm start`, porta 3000):
 
 ```
@@ -782,6 +784,8 @@ DELETE /api/users/2            → {"success": true, "message": "Usuário removi
 
 O log `[INFO] Payment processed for course 1` substitui o antigo `console.log` que expunha o número do cartão e a chave do gateway de pagamento juntos no stdout — finding LOW corrigido.
 
+![Validação do ecommerce-api-legacy rodando após a refatoração](reports/ecommerce-api-legacy/screenshot.png)
+
 **Projeto 3 — `task-manager-api`** (`python seed.py && python app.py`, porta 5000):
 
 ```
@@ -796,6 +800,8 @@ GET /       → {"message": "Task Manager API", "version": "1.0"}
 ```
 
 A ausência do campo `password`/`hash` na resposta de `/users` confirma a correção do finding CRITICAL "Weak Password Hash + Password Exposed in Response".
+
+![Validação do task-manager-api rodando após a refatoração](reports/task-manager-api/screenshot.png)
 
 ### 3.5 Observações sobre o comportamento da skill em stacks diferentes
 
