@@ -1,0 +1,79 @@
+from .database import get_db
+
+def get_all():
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM produtos")
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+def get_by_id(produto_id):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM produtos WHERE id = ?", (produto_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+def create(nome, descricao, preco, estoque, categoria):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute(
+        "INSERT INTO produtos (nome, descricao, preco, estoque, categoria) VALUES (?, ?, ?, ?, ?)",
+        (nome, descricao, preco, estoque, categoria),
+    )
+    db.commit()
+    return cursor.lastrowid
+
+def update(produto_id, nome, descricao, preco, estoque, categoria):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute(
+        "UPDATE produtos SET nome = ?, descricao = ?, preco = ?, estoque = ?, categoria = ? WHERE id = ?",
+        (nome, descricao, preco, estoque, categoria, produto_id),
+    )
+    db.commit()
+    return True
+
+def delete(produto_id):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("DELETE FROM produtos WHERE id = ?", (produto_id,))
+    db.commit()
+    return True
+
+def search(termo=None, categoria=None, preco_min=None, preco_max=None):
+    db = get_db()
+    cursor = db.cursor()
+
+    conditions = ["1=1"]
+    params = []
+
+    if termo:
+        conditions.append("(nome LIKE ? OR descricao LIKE ?)")
+        params += [f"%{termo}%", f"%{termo}%"]
+
+    if categoria:
+        conditions.append("categoria = ?")
+        params.append(categoria)
+
+    if preco_min is not None:
+        conditions.append("preco >= ?")
+        params.append(preco_min)
+
+    if preco_max is not None:
+        conditions.append("preco <= ?")
+        params.append(preco_max)
+
+    query = f"SELECT * FROM produtos WHERE {' AND '.join(conditions)}"
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+def update_estoque(produto_id, quantidade):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute(
+        "UPDATE produtos SET estoque = estoque - ? WHERE id = ?",
+        (quantidade, produto_id),
+    )
+    db.commit()
