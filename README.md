@@ -639,3 +639,169 @@ O arquivo `refactoring-playbook.md` contém **14 padrões** (PB-1 a PB-14) que c
 Cada padrão inclui exemplo Python e Node.js (quando aplicável), mostrando estrutura antes/depois.
 
 Agora, com a skill construída e testada, os 3 projetos podem ser refatorados de forma reproduzível e confiável.
+
+## 3. Resultados
+
+### 3.1 Resumo dos relatórios de auditoria (Fase 2)
+
+Números extraídos diretamente da seção `## Summary` de cada relatório em `reports/`:
+
+| Projeto | Stack detectada | Arquivos analisados | CRITICAL | HIGH | MEDIUM | LOW | Total |
+|---|---|---|---|---|---|---|---|
+| 1 — `code-smells-project` | Python + Flask 3.1.1 | 4 | 6 | 3 | 2 | 1 | 10 |
+| 2 — `ecommerce-api-legacy` | Node.js + Express ^4.18.2 | 3 | 3 | 6 | 3 | 3 | 15 |
+| 3 — `task-manager-api` | Python + Flask 3.0.0 + SQLAlchemy | 13 | 5 | 4 | 7 | 4 | 20 |
+
+Os 3 projetos superam com folga o mínimo de 5 findings e todos incluem pelo menos 1 CRITICAL/HIGH — os critérios de aceite obrigatórios da Fase 2 são atingidos nos 3.
+
+Observações sobre a distribuição:
+
+- **Projeto 1** concentra a maior densidade de CRITICAL (6 de 10 findings) porque o código original tinha falhas de segurança propositalmente graves e concentradas (endpoint de SQL arbitrário, SQL Injection generalizado, senha em texto plano, debug mode, secret hardcoded) além de um único arquivo (`models.py`) acumulando toda a lógica.
+- **Projeto 2** é o único com mais HIGH que CRITICAL — reflexo do callback hell e da lógica de negócio presa nas rotas do `AppManager.js`, mais do que falhas isoladas de segurança pontual.
+- **Projeto 3** tem o maior total (20) mesmo já tendo `models/`, `routes/`, `services/`, `utils/` — prova de que separação de pastas não é sinônimo de arquitetura correta. A skill identificou 2 APIs deprecated (`datetime.utcnow()` usado direto e como `default=`/`onupdate=` de coluna) que só aparecem porque o catálogo cobre detecção de deprecated APIs explicitamente.
+
+### 3.2 Comparação antes/depois da estrutura
+
+**Projeto 1 — `code-smells-project`**
+
+```
+Antes                          Depois
+------------------------       ------------------------------------
+app.py                         app.py                (composition root, delega a src/app.py)
+controllers.py                 src/
+database.py                    ├── app.py            (application factory)
+models.py                      ├── config/settings.py         (SECRET_KEY/DEBUG via env)
+requirements.txt                ├── models/           (database.py, produto_model.py, usuario_model.py, pedido_model.py)
+                                ├── controllers/       (produto_, usuario_, pedido_, relatorio_controller.py)
+                                ├── views/routes.py    (blueprints)
+                                ├── middlewares/error_handler.py
+                                └── utils/security.py  (hash de senha, prepared statements)
+```
+
+`app.py`, `controllers.py`, `models.py` e `database.py` na raiz foram mantidos como referência histórica de "antes", mas não são mais importados por nenhum módulo da aplicação — o entry point real (`app.py` → `create_app()`) delega inteiramente para `src/`.
+
+**Projeto 2 — `ecommerce-api-legacy`**
+
+```
+Antes                          Depois
+------------------------       ------------------------------------
+src/app.js                     src/
+src/AppManager.js               ├── app.js            (entry point)
+src/utils.js                    ├── config/index.js   (PAYMENT_GATEWAY_KEY/ADMIN_TOKEN via env)
+                                ├── models/            (db.js, user.model.js, course.model.js, enrollment.model.js)
+                                ├── controllers/        (checkout.controller.js, report.controller.js, user.controller.js)
+                                ├── routes/             (checkout.routes.js, report.routes.js, user.routes.js, index.js)
+                                ├── middlewares/         (errorHandler.js, asyncHandler.js, requireAdmin.js)
+                                └── utils/               (crypto.js — bcrypt, logger.js)
+```
+
+O God Class `AppManager.js` (141 linhas, 8+ responsabilidades) foi decomposto nas 4 camadas acima; `badCrypto` (base64 em loop) virou `bcryptjs`; rotas administrativas ganharam middleware `requireAdmin`.
+
+**Projeto 3 — `task-manager-api`**
+
+```
+Antes                           Depois
+------------------------        ------------------------------------
+app.py, database.py, seed.py    app.py, seed.py                (entry points mantidos)
+models/ (task, user, category)  config/settings.py              (novo — SECRET_KEY/SMTP via env)
+routes/ (task_, user_,          models/ (+ database.py)
+         report_routes)         controllers/ (task_, user_, report_controller.py)   ← novo
+services/notification_service   views/ (task_, user_, report_routes.py)            ← routes/ renomeado
+utils/helpers.py                schemas/ (task_schema.py, user_schema.py)          ← novo
+                                 middlewares/error_handler.py                       ← novo
+                                 services/notification_service.py                   (mantido)
+                                 utils/helpers.py                                   (mantido)
+```
+
+Este foi o caso de "MVC parcial → MVC completo": a skill reconheceu que `models/`/`routes/` já existiam, então a Fase 3 não recriou tudo do zero — extraiu a lógica de negócio das rotas gordas para `controllers/`, moveu validação para `schemas/`, centralizou erro em `middlewares/` e corrigiu as falhas de segurança (MD5 → hash forte, senha removida do `to_dict()`, `SECRET_KEY`/SMTP para env).
+
+### 3.3 Checklist de validação preenchido
+
+O mesmo checklist do enunciado foi aplicado aos 3 projetos após a Fase 3. Todos os itens foram verificados manualmente (boot real da aplicação + chamadas `curl` nos endpoints originais):
+
+| Item | Projeto 1 | Projeto 2 | Projeto 3 |
+|---|---|---|---|
+| **Fase 1** | | | |
+| Linguagem detectada corretamente | ✅ | ✅ | ✅ |
+| Framework detectado corretamente | ✅ | ✅ | ✅ |
+| Domínio da aplicação descrito corretamente | ✅ | ✅ | ✅ |
+| Número de arquivos analisados condiz com a realidade | ✅ (4) | ✅ (3) | ✅ (13) |
+| **Fase 2** | | | |
+| Relatório segue o template definido nas referências | ✅ | ✅ | ✅ |
+| Cada finding tem arquivo e linhas exatos | ✅ | ✅ | ✅ |
+| Findings ordenados por severidade (CRITICAL → LOW) | ✅ | ✅ | ✅ |
+| Mínimo de 5 findings identificados | ✅ (10) | ✅ (15) | ✅ (20) |
+| Detecção de APIs deprecated incluída (se aplicável) | ➖ n/a | ✅ (sqlite3 callback API) | ✅ (2x `datetime.utcnow()`) |
+| Skill pausa e pede confirmação antes da Fase 3 | ✅ | ✅ | ✅ |
+| **Fase 3** | | | |
+| Estrutura de diretórios segue padrão MVC | ✅ | ✅ | ✅ |
+| Configuração extraída para módulo de config (sem hardcoded) | ✅ | ✅ | ✅ |
+| Models criados para abstrair dados | ✅ | ✅ | ✅ |
+| Views/Routes separadas para roteamento | ✅ | ✅ | ✅ |
+| Controllers concentram o fluxo da aplicação | ✅ | ✅ | ✅ |
+| Error handling centralizado | ✅ | ✅ | ✅ |
+| Entry point claro | ✅ (`app.py`) | ✅ (`src/app.js`) | ✅ (`app.py`) |
+| Aplicação inicia sem erros | ✅ | ✅ | ✅ |
+| Endpoints originais respondem corretamente | ✅ | ✅ | ✅ |
+
+### 3.4 Logs das aplicações rodando após a refatoração
+
+**Projeto 1 — `code-smells-project`** (`python app.py`, porta 5000):
+
+```
+==================================================
+SERVIDOR INICIADO
+Rodando em http://localhost:5000
+==================================================
+ * Serving Flask app 'src.app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+
+GET /                → {"mensagem": "Bem-vindo à API da Loja", "versao": "1.0.0", "endpoints": {...}}
+GET /produtos         → {"sucesso": true, "dados": [ {...10 produtos...} ]}
+GET /health           → {"status": "ok", "database": "connected", "ambiente": "producao",
+                          "counts": {"produtos": 10, "usuarios": 4, "pedidos": 1}}
+```
+
+`Debug mode: off` e a ausência dos campos `secret_key`/`debug` no `/health` confirmam a correção dos 2 findings CRITICAL relacionados (antes, `/health` vazava a `SECRET_KEY` e a flag de debug).
+
+**Projeto 2 — `ecommerce-api-legacy`** (`npm start`, porta 3000):
+
+```
+> desafio-arquitetura-ia-boilerplate@1.0.0 start
+> node src/app.js
+
+Frankenstein LMS rodando na porta 3000...
+[INFO] 2026-09-27T15:35:52.775Z Payment processed for course 1
+
+POST /api/checkout            → {"msg": "Sucesso", "enrollment_id": 2}
+GET  /api/admin/financial-report → [{"course": "Clean Architecture", "revenue": 1994, "students": [...]}]
+DELETE /api/users/2            → {"success": true, "message": "Usuário removido com sucesso."}
+```
+
+O log `[INFO] Payment processed for course 1` substitui o antigo `console.log` que expunha o número do cartão e a chave do gateway de pagamento juntos no stdout — finding LOW corrigido.
+
+**Projeto 3 — `task-manager-api`** (`python seed.py && python app.py`, porta 5000):
+
+```
+ * Serving Flask app 'app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+
+GET /tasks  → 200, lista de 10 tasks com "overdue", "user_name" e "category_name" calculados
+GET /users  → 200, lista de 3 usuários — SEM o campo "password" (antes vazava o hash MD5)
+GET /       → {"message": "Task Manager API", "version": "1.0"}
+```
+
+A ausência do campo `password`/`hash` na resposta de `/users` confirma a correção do finding CRITICAL "Weak Password Hash + Password Exposed in Response".
+
+### 3.5 Observações sobre o comportamento da skill em stacks diferentes
+
+- **Mesmo `SKILL.md`, zero edição entre projetos.** A skill foi copiada via `.claude/skills/refactor-arch/` para `ecommerce-api-legacy/` e `task-manager-api/` sem nenhuma alteração de conteúdo, e as 3 fases executaram de ponta a ponta nos 3 — confirmando o requisito de agnosticismo de tecnologia.
+- **Heurística de detecção em cascata funcionou nos 2 idiomas.** `requirements.txt` → Python/Flask (projetos 1 e 3) e `package.json` → Node/Express (projeto 2) foram suficientes para a Fase 1 identificar corretamente stack, versão de framework e domínio sem ambiguidade.
+- **O catálogo de anti-patterns generalizou bem entre paradigmas distintos.** O mesmo "God Class/God Module" foi detectado tanto num arquivo Python sem classes (`models.py`, funções soltas) quanto numa classe Node.js de fato (`AppManager`) — o sinal de detecção é responsabilidade misturada, não sintaxe de classe.
+- **APIs deprecated são o ponto mais sensível à stack.** No projeto 2, o deprecated é `sqlite3` com API de callback (idiomático de Node antigo); nos projetos 1 e 3 (mesma linguagem), o mesmo padrão de detecção (`datetime.utcnow()`) se repete, mas só o projeto 3 teve ocorrências suficientes para virar finding — o projeto 1 não usa `datetime` na modelagem original.
+- **Profundidade da Fase 3 se adaptou ao ponto de partida.** Nos projetos 1 e 2 (monólitos de 3-4 arquivos), a Fase 3 criou a árvore MVC inteira do zero. No projeto 3, que já tinha `models/`/`routes/`/`services/`/`utils/`, a skill evitou recriar o que já existia — reorganizou apenas o que violava responsabilidades (rotas gordas → controllers, validação solta → schemas) e não caiu na armadilha de classificar "já tem pastas" como "já é MVC" (risco identificado durante o desenvolvimento, ver "Desafios encontrados").
+- **Pausa de confirmação se comportou de forma idêntica nos 3.** A string literal de pausa entre Fase 2 e Fase 3 apareceu sem variação de fraseado nos 3 logs de execução, confirmando que o comportamento não é afetado pela stack-alvo.
