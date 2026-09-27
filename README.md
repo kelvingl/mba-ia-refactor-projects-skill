@@ -483,39 +483,39 @@ Abaixo a documentação da resolução. A parte acimna faz parte do README origi
 
 Detecções feitas manualmente, com base na leitura do código. 
 
-### Projeto `code-smeels-project`
-| # | Problema                                                 | Severidade | Linha                                        |
-| - | -------------------------------------------------------- | ---------- | -------------------------------------------- |
-| 1 | Secret hardcoded                                         | CRITICAL   | `app.py:7`                                   |
-| 2 | Retorno de dados sensíveis ao cliente                    | CRITICAL   | `controllers.py:289`; `models.py:83, 99`     |
-| 3 | SQLInjection possível em quase todos os metodos da model | CRITICAL   | `models.py:28,47-50,57-61,68,92,109-111,...` |
-| 4 | Sem tratamento de erro centralizado, falta padronização  | HIGH       | `controllers.py` (várias funções)            |
-| 5 | Validação duplicada de produtos                          | MEDIUM     | `controllers.py:24-96`                       |
-| 6 | Query N+1 (em for)                                       | MEDIUM     | `models.py:171-201,203-233`                  |
-| 7 | Magic numbers                                            | LOW        | `models.py:256-262`                          |
-| 8 | Concatenação manual de string para mensagem              | LOW        | `controllers.py:8,11,57,106,161,179,208-210` |
+### Projeto `code-smells-project`
+| # | Problema                                                 | Severidade | Linha                                        | Justificativa |
+| - | -------------------------------------------------------- | ---------- | -------------------------------------------- | -------------- |
+| 1 | Secret hardcoded                                         | CRITICAL   | `app.py:7`                                   | Permite forjar sessões se o repositório for exposto. |
+| 2 | Retorno de dados sensíveis ao cliente                    | CRITICAL   | `controllers.py:289`; `models.py:83, 99`     | Senha e configs internas vazam em respostas JSON. |
+| 3 | SQLInjection possível em quase todos os metodos da model | CRITICAL   | `models.py:28,47-50,57-61,68,92,109-111,...` | Input concatenado em SQL permite manipular/destruir o banco. |
+| 4 | Sem tratamento de erro centralizado, falta padronização  | HIGH       | `controllers.py` (várias funções)            | Dificulta debugging e gera respostas inconsistentes ao cliente. |
+| 5 | Validação duplicada de produtos                          | MEDIUM     | `controllers.py:24-96`                       | Regra repetida em 2 lugares gera risco de divergência ao alterar. |
+| 6 | Query N+1 (em for)                                       | MEDIUM     | `models.py:171-201,203-233`                  | Uma query por item em loop degrada performance em produção. |
+| 7 | Magic numbers                                            | LOW        | `models.py:256-262`                          | Números sem nome dificultam entendimento e ajustes seguros. |
+| 8 | Concatenação manual de string para mensagem              | LOW        | `controllers.py:8,11,57,106,161,179,208-210` | Dificulta padronização e busca em logs. |
 
 ### Projeto `ecommerce-api-legacy`
-| # | Problema                                                   | Severidade | Linha                                  |
-| - | ---------------------------------------------------------- | ---------- | -------------------------------------- |
-| 1 | Segredos hardcoded                                         | CRITICAL   | `utils.js:1-7`                         |
-| 2 | God Class concentrando regra de negócio, db e rotas        | CRITICAL   | `AppManager.js:4-141`                  |
-| 3 | Sem error handler; falta padronização de respostas de erro | HIGH       | `app.js`; `AppManager.js`              |
-| 4 | Query N+1 (em for)                                         | MEDIUM     | `AppManager.js:83-126`                 |
-| 5 | Estado global mutável sem sincronização                    | MEDIUM     | `utils.js:9-10,`; `AppManager.js:2,59` |
-| 6 | Banco de dados em memória                                  | LOW        | `AppManager.js:7`                      |
-| 7 | Log do número do cartão                                    | LOW        | `AppManager.js:45`                     |
+| # | Problema                                                   | Severidade | Linha                                  | Justificativa |
+| - | ---------------------------------------------------------- | ---------- | -------------------------------------- | -------------- |
+| 1 | Segredos hardcoded                                         | CRITICAL   | `utils.js:1-7`                         | Expõe senha do banco e chave de pagamento a qualquer leitor do código. |
+| 2 | God Class concentrando regra de negócio, db e rotas        | CRITICAL   | `AppManager.js:4-141`                  | Acopla tudo em uma classe; qualquer mudança arrisca quebrar o resto. |
+| 3 | Sem error handler; falta padronização de respostas de erro | HIGH       | `app.js`; `AppManager.js`              | Dificulta diagnóstico de falhas e gera respostas inconsistentes. |
+| 4 | Query N+1 (em for)                                         | MEDIUM     | `AppManager.js:83-126`                 | Callbacks aninhados disparam N queries por curso/matrícula. |
+| 5 | Estado global mutável sem sincronização                    | MEDIUM     | `utils.js:9-10,`; `AppManager.js:2,59` | Cache/contadores compartilhados podem corromper dados em concorrência. |
+| 6 | Banco de dados em memória                                  | LOW        | `AppManager.js:7`                      | Dados são perdidos a cada reinício do servidor. |
+| 7 | Log do número do cartão                                    | LOW        | `AppManager.js:45`                     | Expor dado de cartão em log viola práticas básicas de PCI-DSS. |
 
 ### Projeto `task-manager-api`
-| # | Problema                                                     | Severidade | Linha                                                  |
-| - | ------------------------------------------------------------ | ---------- | ------------------------------------------------------ |
-| 1 | Segredos hardcoded                                           | CRITICAL   | `app.py:13`; `notification_service.py:9-10`            |
-| 2 | Retorno de dados sensíveis ao cliente                        | CRITICAL   | `user.py:17-25` + várias rotas                         |
-| 3 | Sem error handler centralizado, falta padronização           | HIGH       | `task_routes.py` (várias funções)                      |
-| 4 | Regra  de validação "overdue" duplicada                      | MEDIUM     | `report_routes.py`; `task_routes.py`; `user_routes.py` |
-| 5 | Query N+1 (em for)                                           | MEDIUM     | `task_routes.py:41-57`; `report_routes.py:53-68`       |
-| 6 | Código não usado `generate_id`, `process_task_data`          | LOW        | `helpers.py`                                           |
-| 7 | Comparação de tipo com type(x) == 'str' em vez de isinstance | LOW        | `task_routes.py:141,210`; `helpers.py:103`             |
+| # | Problema                                                     | Severidade | Linha                                                  | Justificativa |
+| - | ------------------------------------------------------------ | ---------- | ------------------------------------------------------ | -------------- |
+| 1 | Segredos hardcoded                                           | CRITICAL   | `app.py:13`; `notification_service.py:9-10`            | Permite que qualquer um com acesso ao código assuma sessões ou envie notificações falsas. |
+| 2 | Retorno de dados sensíveis ao cliente                        | CRITICAL   | `user.py:17-25` + várias rotas                         | Senha/hash do usuário vaza em respostas que nunca deveriam expô-la. |
+| 3 | Sem error handler centralizado, falta padronização           | HIGH       | `task_routes.py` (várias funções)                      | `except:` genérico misturado com específico dificulta rastrear falhas. |
+| 4 | Regra  de validação "overdue" duplicada                      | MEDIUM     | `report_routes.py`; `task_routes.py`; `user_routes.py` | Copiada em 3 arquivos; corrigir em um não corrige nos outros. |
+| 5 | Query N+1 (em for)                                           | MEDIUM     | `task_routes.py:41-57`; `report_routes.py:53-68`       | Uma query por task em loop degrada performance com a base de dados. |
+| 6 | Código não usado `generate_id`, `process_task_data`          | LOW        | `helpers.py`                                           | Funções mortas aumentam manutenção e confundem novos devs. |
+| 7 | Comparação de tipo com type(x) == 'str' em vez de isinstance | LOW        | `task_routes.py:141,210`; `helpers.py:103`             | Falha silenciosamente com subclasses; anti-idiomático em Python. |
 
 ## 2. Desenvolvimento da skill
 
