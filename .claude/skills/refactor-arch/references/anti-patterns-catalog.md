@@ -45,9 +45,17 @@ e recomendação.
 
 ### AP-06 — Autenticação fraca ou ausente
 **Severidade:** HIGH
-**Sinais:** login retornando token fake (`"fake-jwt-token-" + id`); rota administrativa sem checagem de papel/role; ausência de middleware de autenticação em rota sensível.
-**Impacto:** qualquer usuário anônimo alcança funcionalidade administrativa.
-**Recomendação:** JWT (ou equivalente) com segredo em variável de ambiente + middleware de `require_auth`/`require_role`.
+**Sinais:**
+- login retornando token fake (`"fake-jwt-token-" + id`) ou token previsível;
+- **token emitido sem verificador:** existe `jwt.encode`/`jwt.sign` mas nenhum `jwt.decode`/`jwt.verify` em middleware aplicado às rotas — procure os dois lados com `grep`;
+- rota administrativa ou destrutiva (`DELETE`, `/admin/*`, alteração de `role`, criação de usuário) sem checagem de autenticação/papel;
+- **guard fail-open:** o middleware libera quando o segredo falta (`if (!config.adminToken) return next()`, `if not settings.API_KEY: return`);
+- segredo de assinatura/token de admin com default literal ou vazio (`os.environ.get("SECRET_KEY", "dev-...")`, `process.env.ADMIN_TOKEN || ''`) — o default está no repositório, então qualquer um forja token;
+- `jwt.decode` sem `algorithms=[...]` ou com verificação de assinatura desligada;
+- token/API key comparado com `==`/`===` em vez de comparação em tempo constante;
+- proteção só por decorator em cada rota, sem default fechado — rota nova esquecida fica aberta.
+**Impacto:** qualquer usuário anônimo alcança funcionalidade administrativa ou forja identidade.
+**Recomendação:** autenticação deny-by-default (playbook **T-15**): guard global no app/router com allowlist explícita de rotas públicas, segredo obrigatório no boot, verificação de JWT com algoritmo fixo e `require_role` nas operações de privilégio.
 
 ### AP-07 — Validação de entrada ausente na rota
 **Severidade:** MEDIUM
@@ -174,6 +182,7 @@ encontrado ainda.
 
 - [ ] Cobri as 5 categorias (Segurança, Arquitetura/MVC, Dados/Performance, Qualidade, APIs Obsoletas)?
 - [ ] A checagem de APIs Obsoletas (OBS-01 a OBS-08) foi feita, mesmo que nada tenha sido encontrado?
+- [ ] Se há login/token, encontrei onde ele é **verificado**? Se não há verificador, o AP-06 entrou no relatório?
 - [ ] Cada finding tem arquivo + linha?
 - [ ] Tenho ≥ 5 findings, com ≥ 1 CRITICAL ou HIGH?
 

@@ -41,7 +41,8 @@ src/
 │   └── <entidade>_routes.py
 ├── middlewares/
 │   ├── __init__.py
-│   └── error_handler.py     # Captura exceções e retorna response padrão
+│   ├── error_handler.py     # Captura exceções e retorna response padrão
+│   └── auth.py              # Guard global deny-by-default + require_role (se houver rotas protegidas)
 ├── schemas/                 # Validação de payload (opcional, Marshmallow/Pydantic)
 │   └── <entidade>_schema.py
 └── utils/                   # Helpers puros — sem side effects
@@ -66,6 +67,7 @@ src/
 │   └── <entidade>.routes.js
 ├── middlewares/
 │   ├── errorHandler.js
+│   ├── auth.js              # requireAuth/requireAdmin — montado no router, fail-closed
 │   └── validate.js
 └── utils/
     ├── crypto.js
@@ -98,6 +100,9 @@ tabela abaixo descreve.
 - [ ] Existe uma factory/init clara de banco, não uma conexão global mutável.
 - [ ] Há pelo menos 1 arquivo por domínio em cada camada (models, controllers, routes).
 - [ ] Senha usa hash forte (bcrypt/argon2) — nunca MD5/SHA1/texto plano.
+- [ ] Autenticação é aplicada no nível do app/router (deny-by-default), com allowlist explícita de rotas públicas — não só por decorator em cada rota.
+- [ ] Nenhum guard libera acesso quando o segredo está vazio; segredos de acesso são obrigatórios no boot (sem default literal, sem `''`).
+- [ ] Todo token emitido pelo login é verificado por um middleware ativo; operações de privilégio exigem papel `admin`.
 
 ## Armadilhas a evitar
 

@@ -7,6 +7,8 @@ topo e desça.
 > Regra fixa: o contrato observável (método HTTP + path + shape da resposta) **não
 > muda**. Só altere a shape de uma resposta se o contrato de entrada já estiver quebrado
 > por outro motivo (ex.: o endpoint `/admin/query`, que será deletado, não refatorado).
+> Única exceção de status code: rotas que passam a exigir autenticação (T-15) respondem
+> 401/403 a quem não tem credencial — com credencial válida, o contrato original vale.
 
 ---
 
@@ -24,8 +26,14 @@ app.config["DEBUG"] = True
 # src/config/settings.py
 import os
 
+def required_env(name):
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise RuntimeError(f"{name} não definida — copie .env.example para .env e preencha")
+    return value
+
 class Settings:
-    SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-only-change-me"
+    SECRET_KEY = required_env("SECRET_KEY")   # protege acesso → obrigatório, sem default
     DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
     DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///loja.db")
 
@@ -48,15 +56,35 @@ const config = { dbPass: "senha_super_secreta_prod_123", paymentGatewayKey: "pk_
 // src/config/index.js
 require('dotenv').config();
 
+function requiredEnv(name) {
+  const value = (process.env[name] || '').trim();
+  if (!value) throw new Error(`${name} não definida — copie .env.example para .env e preencha`);
+  return value;
+}
+
 module.exports = {
   port: parseInt(process.env.PORT || '3000', 10),
-  paymentGatewayKey: process.env.PAYMENT_GATEWAY_KEY || '',
+  adminToken: requiredEnv('ADMIN_TOKEN'),           // protege acesso → obrigatório
+  paymentGatewayKey: process.env.PAYMENT_GATEWAY_KEY || '',  // credencial de terceiro
   dbUser: process.env.DB_USER || '',
   dbPass: process.env.DB_PASS || '',
 };
 ```
 
-**Extra:** crie `.env.example` com as chaves vazias e garanta `.env` no `.gitignore`.
+**Regra para defaults:** valor não sensível (porta, URL de banco local, flag de debug)
+pode ter default. Segredo que **protege o acesso a esta aplicação** — chave de
+assinatura de sessão/JWT, token de admin/API key que a própria aplicação confere —
+**nunca** tem default nem cai em `''`: use `required_env`/`requiredEnv` e deixe a
+aplicação falhar no boot (fail-fast). Um default como `"dev-only-change-me"` é público
+(está no repositório) e permite forjar tokens; um `''` faz guards do tipo
+`if (!token) return next()` liberarem tudo (ver T-15). Credenciais de serviços de
+terceiros (gateway, SMTP) podem ficar vazias, desde que o código que as usa trate a
+ausência sem quebrar o boot.
+
+**Extra:** crie `.env.example` com as chaves, marcando as obrigatórias com um
+comentário (`# obrigatório — a aplicação não sobe sem este valor`), e garanta `.env` no
+`.gitignore`. Se o projeto não carregava `.env` antes, adicione o loader
+(`python-dotenv`, `dotenv`) para que `cp .env.example .env` baste para rodar.
 
 ---
 
@@ -588,40 +616,211 @@ logging.basicConfig(level=logging.INFO if settings.DEBUG else logging.WARNING)
 
 ---
 
+## T-15 — Autenticação ausente ou fraca → deny-by-default
+
+Aplica-se a todo finding AP-06. O objetivo não é "colocar um decorator nas rotas
+sensíveis", é **inverter o default**: toda rota nasce protegida e só fica pública quem
+estiver numa allowlist explícita. Decorator por rota sozinho é *fail-open* — a rota que
+alguém esquecer de decorar fica aberta.
+
+### Regras (todas obrigatórias)
+
+1. **Segredo obrigatório no boot** (T-01): chave de assinatura e token de admin vêm de
+   `required_env`/`requiredEnv`. Nenhum guard trata o caso "segredo vazio" — se a
+   aplicação está de pé, o segredo existe.
+2. **Proteção no nível do app/router**, não por rota: `before_request` (Flask),
+   `router.use(guard)` (Express), filtro global (Spring), middleware de grupo
+   (Laravel/Gin). Rotas públicas ficam numa allowlist pequena e comentada.
+3. **Todo token emitido tem um verificador ativo.** Login que devolve JWT sem nenhum
+   middleware que o confira é o mesmo que não ter autenticação.
+4. **JWT:** `algorithms` fixo na verificação, `exp` sempre presente, segredo vindo da
+   config. Nunca `verify=False` / `options={"verify_signature": False}`.
+5. **Segredo estático** (API key, token de admin) comparado em tempo constante:
+   `hmac.compare_digest` (Python), `crypto.timingSafeEqual` (Node).
+6. **401** quando falta credencial ou ela é inválida; **403** quando a credencial é válida
+   mas o papel não basta.
+7. **Operações que concedem ou removem privilégio** (criar usuário, alterar `role`,
+   deletar usuário) exigem papel `admin`. O primeiro admin vem de seed/script de CLI —
+   nunca de um endpoint aberto.
+8. **Contrato:** rota que passa a exigir autenticação pode responder 401/403 sem
+   credencial — é o **único** desvio permitido da regra de contrato. Liste essas rotas no
+   output da Fase 3 e atualize os exemplos de requisição do projeto (`api.http`, README,
+   coleção Postman) com o header necessário.
+
+### Antes (Python/Flask)
+```python
+@user_bp.route('/login', methods=['POST'])
+def login():
+    ...
+    return jsonify({'token': 'fake-jwt-token-' + str(user.id)})   # token forjável
+
+@user_bp.route('/users/<int:user_id>', methods=['DELETE'])         # nenhuma checagem
+def delete_user(user_id): ...
+```
+Também é "antes": login emitindo um JWT real com `jwt.encode(...)` enquanto nenhuma rota
+chama `jwt.decode` — o token existe, mas não protege nada.
+
+### Depois (Python/Flask)
+```python
+# src/middlewares/auth.py
+from datetime import datetime, timedelta, timezone
+from functools import wraps
+import jwt
+from flask import g, request
+from config.settings import settings
+from middlewares.error_handler import UnauthorizedError, ForbiddenError
+
+JWT_ALGORITHM = "HS256"
+TOKEN_TTL = timedelta(hours=24)
+
+# Únicas rotas acessíveis sem token (nome do endpoint Flask). Toda rota nova nasce protegida.
+PUBLIC_ENDPOINTS = {"index", "health", "users.login"}
+
+
+def issue_token(user):
+    claims = {"sub": str(user.id), "role": user.role,
+              "exp": datetime.now(timezone.utc) + TOKEN_TTL}
+    return jwt.encode(claims, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def authenticate_request():
+    # endpoint None = rota inexistente → deixa o Flask responder 404
+    if request.method == "OPTIONS" or request.endpoint is None or request.endpoint in PUBLIC_ENDPOINTS:
+        return
+    scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise UnauthorizedError("Token ausente")
+    try:
+        claims = jwt.decode(token, settings.SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        raise UnauthorizedError("Token inválido ou expirado")
+    g.current_user = {"id": int(claims["sub"]), "role": claims.get("role")}
+
+
+def require_role(*roles):
+    def decorator(view):
+        @wraps(view)
+        def wrapper(*args, **kwargs):
+            if g.current_user["role"] not in roles:
+                raise ForbiddenError("Permissão insuficiente")
+            return view(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+def init_auth(app):
+    app.before_request(authenticate_request)
+```
+```python
+# src/app.py (composition root)
+register_error_handlers(app)
+init_auth(app)                      # antes dos blueprints: tudo protegido por padrão
+
+# src/views/user_routes.py
+@user_bp.route('/users/<int:user_id>', methods=['DELETE'])
+@require_role('admin')
+def delete_user(user_id): ...
+```
+
+### Antes (Node.js/Express — guard fail-open)
+```javascript
+function requireAdmin(req, res, next) {
+  if (!config.adminToken) return next();          // ADMIN_TOKEN vazio → libera tudo
+  if (req.headers['x-admin-token'] !== config.adminToken) { /* 401 */ }
+  next();
+}
+```
+
+### Depois (Node.js/Express)
+```javascript
+// src/middlewares/auth.js
+const crypto = require('crypto');
+const config = require('../config');   // T-01: o boot já falhou se ADMIN_TOKEN faltar
+const { UnauthorizedError } = require('../utils/errors');
+
+function safeEqual(provided, expected) {
+  const a = Buffer.from(String(provided));
+  const b = Buffer.from(String(expected));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function requireAdmin(req, res, next) {
+  const provided = req.get('x-admin-token');
+  if (!provided || !safeEqual(provided, config.adminToken)) {
+    return next(new UnauthorizedError('Unauthorized'));
+  }
+  next();
+}
+
+module.exports = { requireAdmin };
+```
+```javascript
+// src/routes/index.js — a ordem de montagem É a política de acesso
+router.use('/api', checkoutRoutes);     // público: allowlist explícita, montada antes do guard
+router.use('/api', requireAdmin);       // daqui para baixo, tudo exige credencial
+router.use('/api', reportRoutes);
+router.use('/api', userRoutes);
+```
+
+Com usuários autenticados por JWT em Express, o desenho é o mesmo do Flask:
+`router.use(requireAuth)` global depois das rotas públicas + `requireRole('admin')` nas
+rotas de privilégio.
+
+---
+
 ## Sequência recomendada na Fase 3
 
-1. **Config primeiro** (T-01) — desbloqueia o resto sem quebrar nada.
+1. **Config primeiro** (T-01) — desbloqueia o resto sem quebrar nada; segredos de acesso já ficam obrigatórios.
 2. **Segurança crítica** (T-02, T-03) — SQL injection e senha antes de mexer em mais nada.
 3. **Estado e estrutura** (T-04, T-05) — remove globals, quebra o God Class em camadas.
 4. **Fluxo de request** (T-06) — controllers assumindo a lógica que estava na rota.
-5. **Cross-cutting** (T-07) — error handler central substitui os `try/except` espalhados.
+5. **Cross-cutting** (T-07, T-15) — error handler central e, sobre ele, a autenticação deny-by-default (T-15 depende das exceções tipadas do T-07).
 6. **Assíncrono e performance** (T-08, T-09) — só depois que a estrutura já está estável.
 7. **Integridade de dados** (T-10) e **API deprecated** (T-11).
 8. **Limpeza** (T-12, T-13, T-14) e remoção final dos arquivos legados.
-9. **Valide** — instale dependências, suba a aplicação, faça `curl` nos endpoints originais.
+9. **Valide** — instale dependências, suba a aplicação, faça `curl` nos endpoints originais e rode a matriz de autenticação.
 
 ## Validação final (Fase 3)
+
+Exporte valores **de teste** para os segredos obrigatórios antes do boot (ou crie um
+`.env` local, que não é commitado). Nunca commite esses valores.
 
 Para Python/Flask:
 ```bash
 pip install -r requirements.txt
+
+# 1) boot sem o segredo precisa falhar com mensagem clara (fail-fast)
+env -u SECRET_KEY python app.py; echo "exit=$?"   # esperado: exit != 0 e "SECRET_KEY não definida"
+
+# 2) boot normal
+export SECRET_KEY=test-secret-validation
 python app.py &
 APP_PID=$!
 sleep 3
-curl -sS http://localhost:5000/ | head
-curl -sS http://localhost:5000/<endpoint-GET> | head
-curl -sS -X POST http://localhost:5000/<endpoint-POST> -H 'Content-Type: application/json' -d '{...}' | head
+curl -sS http://localhost:5000/ | head                                     # pública → 200
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:5000/<rota-protegida>        # → 401
+curl -sS -o /dev/null -w '%{http_code}\n' -H 'Authorization: Bearer invalido' http://localhost:5000/<rota-protegida>  # → 401
+TOKEN=$(curl -sS -X POST http://localhost:5000/login -H 'Content-Type: application/json' \
+        -d '{"email":"<admin-do-seed>","password":"<senha>"}' | python -c 'import sys,json; print(json.load(sys.stdin)["token"])')
+curl -sS -H "Authorization: Bearer $TOKEN" http://localhost:5000/<rota-protegida> | head  # → 2xx
+# token de usuário comum numa rota de admin → 403
 kill $APP_PID
 ```
 
 Para Node.js/Express:
 ```bash
 npm install
+env -u ADMIN_TOKEN node src/app.js; echo "exit=$?"        # esperado: exit != 0
+export ADMIN_TOKEN=test-admin-token
 node src/app.js &
 APP_PID=$!
 sleep 3
-curl -sS http://localhost:3000/<endpoint> | head
+curl -sS http://localhost:3000/<endpoint-publico> | head                                  # → 2xx
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/<rota-admin>              # → 401
+curl -sS -o /dev/null -w '%{http_code}\n' -H 'X-Admin-Token: errado' http://localhost:3000/<rota-admin>  # → 401
+curl -sS -H "X-Admin-Token: $ADMIN_TOKEN" http://localhost:3000/<rota-admin> | head      # → 2xx
 kill $APP_PID
 ```
 
-Se qualquer comando retornar 5xx ou não conectar, **corrija antes de declarar sucesso**.
+Se qualquer comando retornar 5xx, não conectar, ou uma rota protegida responder 2xx sem
+credencial, **corrija antes de declarar sucesso**.

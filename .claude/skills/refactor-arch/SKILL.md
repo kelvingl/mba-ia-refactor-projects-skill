@@ -16,7 +16,8 @@ antecipada (não refatore durante a análise, não audite sem antes ter detectad
 2. **Sem endereço, não é finding.** Todo item do relatório carrega arquivo + linha exatos. "Código ruim em geral" não é um achado válido.
 3. **A auditoria só lê.** Fase 2 é somente leitura + escrita do relatório em `reports/`. Mudar código é trabalho exclusivo da Fase 3, e só depois que um humano confirmar.
 4. **"Completo" exige prova.** A Fase 3 não termina com a árvore de pastas nova — termina com a aplicação de pé e os endpoints originais respondendo.
-5. **O contrato público não muda.** Métodos HTTP, paths e status codes dos endpoints originais são preservados durante toda a refatoração, mesmo quando a implementação por trás muda completamente.
+5. **O contrato público não muda.** Métodos HTTP, paths e status codes dos endpoints originais são preservados durante toda a refatoração, mesmo quando a implementação por trás muda completamente. Única exceção: rotas que passam a exigir autenticação respondem 401/403 a quem não tem credencial (com credencial válida, o contrato original vale) — e essas rotas são listadas no output da Fase 3.
+6. **Acesso fechado por padrão.** Segurança nunca depende de configuração opcional: segredo que protege acesso é obrigatório no boot, e guard de autenticação nunca libera quando algo falta.
 
 ## Mapa de conhecimento
 
@@ -76,6 +77,7 @@ Ao imprimir esse bloco, siga imediatamente para a Fase 2 — não pare aqui.
 **Antes de escrever o relatório:**
 - Percorra o catálogo inteiro (todas as categorias, incluindo a seção de APIs obsoletas — ela é obrigatória) procurando os sinais de detecção no código real.
 - Para cada sinal encontrado, anote **arquivo + linha(s)** exatas e a severidade fixada pelo catálogo (não reclassifique por conta própria).
+- Autenticação exige rastrear os dois lados: se o código emite token/sessão (login), localize onde ele é **verificado** e quais rotas passam por essa verificação. Token sem verificador, guard que libera quando o segredo falta e segredo com default literal são findings AP-06.
 - Confirme os dois mínimos antes de seguir: **≥ 5 findings** e **≥ 1 CRITICAL ou HIGH**. Se não bater, volte ao catálogo — provavelmente faltou revisar um sinal óbvio.
 
 **Ao escrever o relatório:**
@@ -100,15 +102,21 @@ Ao imprimir esse bloco, siga imediatamente para a Fase 2 — não pare aqui.
 
 **Migrar:**
 - Crie a nova estrutura movendo uma responsabilidade por vez: segredos → `config/`, acesso a dados → `models/` (queries sempre parametrizadas), orquestração → `controllers/`, roteamento → `views`/`routes`, tratamento de erro → `middlewares/`.
-- Para cada finding CRITICAL/HIGH do relatório, aplique o padrão de transformação correspondente do playbook (SQL injection → prepared statements, senha fraca → hash forte, God Class → separação por domínio, callback hell → async/await, N+1 → JOIN/eager loading, etc.).
+- Para cada finding CRITICAL/HIGH do relatório, aplique o padrão de transformação correspondente do playbook (SQL injection → prepared statements, senha fraca → hash forte, God Class → separação por domínio, callback hell → async/await, N+1 → JOIN/eager loading, autenticação ausente/fraca → deny-by-default (T-15), etc.).
+- Autenticação (T-15) não é "colocar decorator nas rotas sensíveis": o guard é global (app/router) com allowlist explícita de rotas públicas, os segredos de acesso são obrigatórios no boot (sem default, sem `''`), e operações de privilégio (criar/deletar usuário, alterar papel) exigem `admin`. Atualize `.env.example` e os exemplos de requisição do projeto com a credencial necessária.
 - Reescreva o entry point (`app.py`/`app.js`) como composition root puro — sem rotas, sem query, sem lógica de negócio.
 - Apague os arquivos legados substituídos. Não deixe código morto nem estrutura duplicada para trás.
 
 **Provar que funciona (obrigatório, não pule):**
 - Instale dependências se necessário (`pip install -r requirements.txt`, `npm install`).
 - Suba a aplicação em background com o comando apropriado, aguarde o boot e faça requisições reais (`curl`) em pelo menos 2–3 endpoints originais — priorize um GET simples (`/`, `/health`) e um endpoint mais complexo do domínio.
+- Se o projeto tem rotas protegidas, rode a **matriz de autenticação** (comandos em `references/refactoring-playbook.md`, seção "Validação final"):
+  - boot **sem** o segredo obrigatório → falha com mensagem clara (exit ≠ 0);
+  - rota protegida sem credencial → 401; com credencial inválida → 401; com credencial válida → 2xx;
+  - rota de admin com credencial de usuário comum → 403 (quando houver papéis).
+  Use valores de teste exportados no shell — nunca commite segredos.
 - Encerre o processo ao final do teste.
-- Se algo falhar, leia os logs, corrija e repita — só declare sucesso quando todos os endpoints testados responderem sem erro 5xx (4xx esperado por payload ausente é aceitável).
+- Se algo falhar, leia os logs, corrija e repita — só declare sucesso quando todos os endpoints testados responderem sem erro 5xx (4xx esperado por payload ausente é aceitável) **e** nenhuma rota protegida responder 2xx sem credencial.
 
 **Output obrigatório ao concluir:**
 
@@ -124,6 +132,15 @@ Validation
   ✓/✗ Endpoint <X> responds correctly
   ✓/✗ Endpoint <Y> responds correctly
   ...
+
+Access control (omitir se o projeto não tem rotas protegidas)
+  Public routes:    <lista>
+  Protected routes: <lista> (401/403 sem credencial — único desvio de contrato)
+  ✓/✗ Boot without <SEGREDO> fails with clear error
+  ✓/✗ <rota protegida> without credential → 401
+  ✓/✗ <rota protegida> with invalid credential → 401
+  ✓/✗ <rota protegida> with valid credential → 2xx
+  ✓/✗ <rota admin> with non-admin credential → 403
 ================================
 ```
 
