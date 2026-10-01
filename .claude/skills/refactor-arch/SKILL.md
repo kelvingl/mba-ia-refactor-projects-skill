@@ -78,6 +78,7 @@ Ao imprimir esse bloco, siga imediatamente para a Fase 2 — não pare aqui.
 - Percorra o catálogo inteiro (todas as categorias, incluindo a seção de APIs obsoletas — ela é obrigatória) procurando os sinais de detecção no código real.
 - Para cada sinal encontrado, anote **arquivo + linha(s)** exatas e a severidade fixada pelo catálogo (não reclassifique por conta própria).
 - Autenticação exige rastrear os dois lados: se o código emite token/sessão (login), localize onde ele é **verificado** e quais rotas passam por essa verificação. Token sem verificador, guard que libera quando o segredo falta e segredo com default literal são findings AP-06.
+- Autorização exige ir além do "tem token?": para cada rota que recebe id de usuário (path, corpo, query) confira se ele é comparado com a identidade autenticada, e para cada update de usuário confira quem pode gravar `role`/`active`. Id de dono vindo do payload, rota `/users/<id>` sem checagem de "próprio ou admin" e campo de papel gravável por qualquer autenticado também são findings AP-06.
 - Confirme os dois mínimos antes de seguir: **≥ 5 findings** e **≥ 1 CRITICAL ou HIGH**. Se não bater, volte ao catálogo — provavelmente faltou revisar um sinal óbvio.
 
 **Ao escrever o relatório:**
@@ -103,7 +104,11 @@ Ao imprimir esse bloco, siga imediatamente para a Fase 2 — não pare aqui.
 **Migrar:**
 - Crie a nova estrutura movendo uma responsabilidade por vez: segredos → `config/`, acesso a dados → `models/` (queries sempre parametrizadas), orquestração → `controllers/`, roteamento → `views`/`routes`, tratamento de erro → `middlewares/`.
 - Para cada finding CRITICAL/HIGH do relatório, aplique o padrão de transformação correspondente do playbook (SQL injection → prepared statements, senha fraca → hash forte, God Class → separação por domínio, callback hell → async/await, N+1 → JOIN/eager loading, autenticação ausente/fraca → deny-by-default (T-15), etc.).
-- Autenticação (T-15) não é "colocar decorator nas rotas sensíveis": o guard é global (app/router) com allowlist explícita de rotas públicas, os segredos de acesso são obrigatórios no boot (sem default, sem `''`), e operações de privilégio (criar/deletar usuário, alterar papel) exigem `admin`. Atualize `.env.example` e os exemplos de requisição do projeto com a credencial necessária.
+- Autenticação (T-15) não é "colocar decorator nas rotas sensíveis". Aplique as três camadas do T-15:
+  - **autenticação:** guard global (app/router) com allowlist explícita de rotas públicas; segredos de acesso obrigatórios no boot (sem default, sem `''`);
+  - **papel:** criar/deletar usuário exige `admin`, e campos de privilégio (`role`, `active`...) só são graváveis por `admin` em **qualquer** rota, inclusive o update genérico de usuário;
+  - **dono do recurso:** a identidade vem sempre do token, nunca de `usuario_id` no payload; rotas com id de usuário só servem o próprio usuário ou um admin. A checagem fica no controller, que recebe o `current_user` da view.
+  Atualize `.env.example` e os exemplos de requisição do projeto com a credencial necessária.
 - Reescreva o entry point (`app.py`/`app.js`) como composition root puro — sem rotas, sem query, sem lógica de negócio.
 - Apague os arquivos legados substituídos. Não deixe código morto nem estrutura duplicada para trás.
 
@@ -113,10 +118,13 @@ Ao imprimir esse bloco, siga imediatamente para a Fase 2 — não pare aqui.
 - Se o projeto tem rotas protegidas, rode a **matriz de autenticação** (comandos em `references/refactoring-playbook.md`, seção "Validação final"):
   - boot **sem** o segredo obrigatório → falha com mensagem clara (exit ≠ 0);
   - rota protegida sem credencial → 401; com credencial inválida → 401; com credencial válida → 2xx;
-  - rota de admin com credencial de usuário comum → 403 (quando houver papéis).
-  Use valores de teste exportados no shell — nunca commite segredos.
+  - rota de admin com credencial de usuário comum → 403 (quando houver papéis);
+  - usuário comum alterando o próprio papel (`{"role": "admin"}` no update) → 403, e o papel continua o mesmo;
+  - usuário comum lendo ou alterando dado de outro usuário (`/users/<outro>`, `/pedidos/usuario/<outro>`) → 403;
+  - id de dono enviado no payload é ignorado: o recurso fica com o usuário do token.
+  As três últimas linhas valem quando há usuários com papéis diferentes; com uma única credencial de admin, registre "n/a". Use valores de teste exportados no shell — nunca commite segredos.
 - Encerre o processo ao final do teste.
-- Se algo falhar, leia os logs, corrija e repita — só declare sucesso quando todos os endpoints testados responderem sem erro 5xx (4xx esperado por payload ausente é aceitável) **e** nenhuma rota protegida responder 2xx sem credencial.
+- Se algo falhar, leia os logs, corrija e repita — só declare sucesso quando todos os endpoints testados responderem sem erro 5xx (4xx esperado por payload ausente é aceitável), nenhuma rota protegida responder 2xx sem credencial **e** nenhum usuário comum conseguir alterar o próprio papel ou dado de outro usuário.
 
 **Output obrigatório ao concluir:**
 
@@ -141,10 +149,39 @@ Access control (omitir se o projeto não tem rotas protegidas)
   ✓/✗ <rota protegida> with invalid credential → 401
   ✓/✗ <rota protegida> with valid credential → 2xx
   ✓/✗ <rota admin> with non-admin credential → 403
+  ✓/✗ Non-admin setting own role via <rota de update> → 403 (role unchanged)
+  ✓/✗ Non-admin accessing another user's <recurso> → 403
+  ✓/✗ Owner id in payload ignored on <rota de criação> (resource bound to token user)
 ================================
 ```
 
 Se a validação falhar em algum ponto, relate exatamente o que quebrou e o que foi tentado — nunca declare "complete" com um endpoint retornando 5xx por bug real.
+
+## Saída final
+
+Salve um relatório final em `reports/<nome-do-projeto>/final-report.md` (<nome-do-projeto> = code-smells-project|ecommerce-api-legacy|task-manager-api; crie `reports/` no diretório pai do projeto se não existir; sobrescreva o arquivo se já existir) contendo:
+```
+---
+Old Project Structure:
+<árvore de diretórios>
+
+---
+New Project Structure:
+<árvore de diretórios>
+
+---
+Output da Fase 1 (Project Analysis)
+<saída da fase 1>
+
+---
+Output da Fase 2 (Architecture Audit)
+<saída da fase 2>
+
+---
+Output da Fase 3 (Refactoring to MVC)
+<saída da fase 3>
+
+```
 
 ---
 

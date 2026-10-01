@@ -84,7 +84,7 @@ tabela abaixo descreve.
 |---|---|---|
 | `config/` | Ler `os.environ`/`process.env`, aplicar defaults seguros, expor config imutável. **Zero** string sensível literal — `SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-never-use-in-prod")`. | Lógica de negócio, side effects, print/log. |
 | `models/` | Definir schema (tabela/coluna/constraint); encapsular queries sempre **parametrizadas**; expor acesso a dado (`find_by_id`, `save`, `delete`); método de domínio da própria entidade (`is_overdue`, `total`). | Tocar `request`/`response`; validar payload de usuário; formatar para JSON/HTML. |
-| `controllers/` | Receber dado já parseado/validado; chamar model(s)/service(s) na ordem certa; decidir **o quê** responder; lançar exceção tipada (`NotFoundError`, `ValidationError`) para o middleware tratar. | Query SQL crua; acessar variável global mutável; serializar para JSON (isso é da view). |
+| `controllers/` | Receber dado já parseado/validado; chamar model(s)/service(s) na ordem certa; decidir **o quê** responder; lançar exceção tipada (`NotFoundError`, `ValidationError`) para o middleware tratar; aplicar a autorização de negócio (dono do recurso, quem pode gravar campos de privilégio) com o `current_user` recebido da view. | Query SQL crua; acessar variável global mutável; serializar para JSON (isso é da view). |
 | `views/`/`routes/` | Declarar rota + método HTTP; extrair `params`/`body`/`query`; acionar validação de schema; chamar o controller certo; serializar a resposta (DTO). | Acessar o banco diretamente; qualquer cálculo além de montar a resposta. |
 | `middlewares/` | Error handler central (`Error` → status HTTP + JSON); autenticação/autorização; parsing, rate limit, CORS; log de request. | Lógica de negócio. |
 | `utils/` | Função pura sem dependência de framework (hash, UUID, formatação de data). | Qualquer I/O, estado global, dependência pesada. |
@@ -103,6 +103,8 @@ tabela abaixo descreve.
 - [ ] Autenticação é aplicada no nível do app/router (deny-by-default), com allowlist explícita de rotas públicas — não só por decorator em cada rota.
 - [ ] Nenhum guard libera acesso quando o segredo está vazio; segredos de acesso são obrigatórios no boot (sem default literal, sem `''`).
 - [ ] Todo token emitido pelo login é verificado por um middleware ativo; operações de privilégio exigem papel `admin`.
+- [ ] Campos de privilégio (`role`, `active`...) só são graváveis por `admin` em qualquer rota — inclusive no update genérico de usuário.
+- [ ] Nenhum controller usa id de dono vindo do payload; rotas com id de usuário servem só o próprio usuário ou um admin (checagem no controller com o `current_user` do token).
 
 ## Armadilhas a evitar
 

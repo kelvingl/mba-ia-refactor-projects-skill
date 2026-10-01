@@ -616,12 +616,21 @@ logging.basicConfig(level=logging.INFO if settings.DEBUG else logging.WARNING)
 
 ---
 
-## T-15 — Autenticação ausente ou fraca → deny-by-default
+## T-15 — Autenticação/autorização ausente ou fraca → deny-by-default
 
 Aplica-se a todo finding AP-06. O objetivo não é "colocar um decorator nas rotas
 sensíveis", é **inverter o default**: toda rota nasce protegida e só fica pública quem
 estiver numa allowlist explícita. Decorator por rota sozinho é *fail-open* — a rota que
 alguém esquecer de decorar fica aberta.
+
+O T-15 tem três camadas, e as três são obrigatórias — parar na primeira deixa a API
+"autenticada" mas ainda explorável:
+
+| Camada | Pergunta que responde | Falha típica se faltar |
+|---|---|---|
+| **Autenticação** (regras 1–6) | Quem é você? | Rota aberta para anônimo |
+| **Papel** (regra 7) | Você pode executar essa operação / alterar esse campo? | Usuário comum se promove a admin via `PUT /users/<id>` com `{"role": "admin"}` |
+| **Dono do recurso** (regra 8) | Esse recurso é seu? | Usuário lê/altera dados de outro trocando o id na URL ou no corpo (IDOR) |
 
 ### Regras (todas obrigatórias)
 
@@ -639,10 +648,30 @@ alguém esquecer de decorar fica aberta.
    `hmac.compare_digest` (Python), `crypto.timingSafeEqual` (Node).
 6. **401** quando falta credencial ou ela é inválida; **403** quando a credencial é válida
    mas o papel não basta.
-7. **Operações que concedem ou removem privilégio** (criar usuário, alterar `role`,
-   deletar usuário) exigem papel `admin`. O primeiro admin vem de seed/script de CLI —
-   nunca de um endpoint aberto.
-8. **Contrato:** rota que passa a exigir autenticação pode responder 401/403 sem
+7. **Privilégio é checado por operação e por campo, não só por rota.**
+   - Criar e deletar usuário exigem papel `admin`. O primeiro admin vem de seed/script
+     de CLI — nunca de um endpoint aberto.
+   - Campos de privilégio (`role`, `tipo`, `is_admin`, `active`/`ativo`, `permissions`)
+     só podem ser gravados por `admin`, **em qualquer rota** — inclusive no update
+     genérico `PUT/PATCH /users/<id>`, que é por onde a escalação costuma passar.
+   - Em update, não-admin que envia campo de privilégio recebe **403** (não ignore em
+     silêncio — o cliente precisa saber que a mudança não aconteceu). Em cadastro
+     público (se existir), o papel é forçado para o mínimo (`user`/`cliente`) e o campo
+     enviado é descartado.
+   - Prefira dois schemas (`UpdateSelfSchema` sem campos de privilégio,
+     `AdminUpdateUserSchema` com eles) ou uma checagem explícita no controller; nunca
+     faça `setattr` em loop sobre o payload sem allowlist de campos (mass assignment).
+8. **Dono do recurso (anti-IDOR).**
+   - A identidade vem **sempre do token** (`g.current_user`, `req.user`). Nunca use
+     `usuario_id`/`user_id` vindo do corpo, da query ou de fallback
+     (`dados.get("usuario_id") or g.current_user["id"]` continua vulnerável).
+   - Rota com id de usuário no path (`/users/<id>`, `/pedidos/usuario/<id>`,
+     `/users/<id>/tasks`) ou recurso que tem dono (pedido, tarefa): não-admin só acessa o
+     próprio; o de outro responde **403**. Listagens sem filtro de dono (`GET /pedidos`
+     com todos os pedidos) são de admin, ou filtram pelo usuário do token.
+   - A checagem mora no **controller** (é regra de negócio), que recebe o `current_user`
+     da view como argumento. O model nunca decide autorização e nunca lê `g`/`req`.
+9. **Contrato:** rota que passa a exigir autenticação pode responder 401/403 sem
    credencial — é o **único** desvio permitido da regra de contrato. Liste essas rotas no
    output da Fase 3 e atualize os exemplos de requisição do projeto (`api.http`, README,
    coleção Postman) com o header necessário.
@@ -722,6 +751,87 @@ init_auth(app)                      # antes dos blueprints: tudo protegido por p
 def delete_user(user_id): ...
 ```
 
+### Antes (Python/Flask — papel e dono do recurso)
+```python
+# views/user_routes.py — qualquer usuário autenticado chega aqui
+@user_bp.route('/users/<int:user_id>', methods=['PUT'])
+def update_user(user_id):
+    payload = UpdateUserSchema().load(request.get_json(silent=True) or {})   # aceita "role"
+    return jsonify(user_controller.update_user(user_id, payload))
+
+# controllers/user_controller.py
+def update_user(user_id, payload):
+    user = User.query.get(user_id)                       # qualquer user_id, não só o próprio
+    for field in ('name', 'role', 'active'):             # mass assignment de privilégio
+        if field in payload:
+            setattr(user, field, payload[field])
+
+# views/pedido_routes.py
+usuario_id = dados.get("usuario_id") or g.current_user["id"]   # dono vindo do corpo
+```
+Resultado: um usuário comum envia `PUT /users/<seu-id>` com `{"role": "admin"}` e vira
+admin; ou envia `PUT /users/<id-do-admin>` com `{"password": "..."}` e toma a conta.
+
+### Depois (Python/Flask — papel e dono do recurso)
+```python
+# src/controllers/authorization.py — regras de acesso reutilizadas pelos controllers
+from middlewares.error_handler import ForbiddenError
+
+PRIVILEGED_USER_FIELDS = frozenset({"role", "active"})
+
+
+def is_admin(current_user):
+    return current_user["role"] == "admin"
+
+
+def ensure_self_or_admin(current_user, owner_id):
+    if not is_admin(current_user) and current_user["id"] != owner_id:
+        raise ForbiddenError("Acesso a recurso de outro usuário")
+
+
+def ensure_can_set_fields(current_user, payload, privileged=PRIVILEGED_USER_FIELDS):
+    if not is_admin(current_user) and privileged & payload.keys():
+        raise ForbiddenError("Somente admin altera papel ou status")
+```
+```python
+# src/controllers/user_controller.py
+UPDATABLE_FIELDS = ("name", "email", "role", "active")   # allowlist explícita
+
+
+def update_user(current_user, user_id, payload):
+    ensure_self_or_admin(current_user, user_id)
+    ensure_can_set_fields(current_user, payload)
+    user = User.query.get(user_id)
+    if not user:
+        raise NotFoundError("Usuário não encontrado")
+    for field in UPDATABLE_FIELDS:
+        if field in payload:
+            setattr(user, field, payload[field])
+    if "password" in payload:
+        user.set_password(payload["password"])
+    db.session.commit()
+    return user.to_dict()
+```
+```python
+# src/views/user_routes.py — a view só repassa a identidade do token
+@user_bp.route('/users/<int:user_id>', methods=['PUT'])
+def update_user(user_id):
+    payload = UpdateUserSchema().load(request.get_json(silent=True) or {})
+    return jsonify(user_controller.update_user(g.current_user, user_id, payload))
+
+# src/views/pedido_routes.py — dono SEMPRE do token; usuario_id do corpo é ignorado
+@pedido_bp.route('/pedidos', methods=['POST'])
+def criar():
+    dados = request.get_json(silent=True) or {}
+    resultado = pedido_controller.criar_pedido(g.current_user["id"], dados.get("itens", []))
+    return jsonify({"dados": resultado, "sucesso": True}), 201
+
+@pedido_bp.route('/pedidos/usuario/<int:usuario_id>', methods=['GET'])
+def listar_do_usuario(usuario_id):
+    return jsonify({"dados": pedido_controller.listar_do_usuario(g.current_user, usuario_id)})
+    # o controller chama ensure_self_or_admin(current_user, usuario_id) antes da query
+```
+
 ### Antes (Node.js/Express — guard fail-open)
 ```javascript
 function requireAdmin(req, res, next) {
@@ -763,8 +873,25 @@ router.use('/api', userRoutes);
 ```
 
 Com usuários autenticados por JWT em Express, o desenho é o mesmo do Flask:
-`router.use(requireAuth)` global depois das rotas públicas + `requireRole('admin')` nas
-rotas de privilégio.
+`router.use(requireAuth)` global depois das rotas públicas (o guard preenche `req.user`),
+`requireRole('admin')` nas rotas de privilégio, e as regras 7 e 8 no controller:
+
+```javascript
+// src/controllers/user.controller.js
+async function updateUser(currentUser, userId, payload) {
+  ensureSelfOrAdmin(currentUser, userId);          // 403 se não for o próprio nem admin
+  ensureCanSetFields(currentUser, payload);        // 403 se não-admin enviar role/active
+  return userModel.update(userId, pick(payload, UPDATABLE_FIELDS));
+}
+
+// src/routes/user.routes.js — identidade do token, nunca de req.body.userId
+router.put('/users/:id', asyncHandler(async (req, res) => {
+  res.json(await userController.updateUser(req.user, Number(req.params.id), req.body));
+}));
+```
+
+Quando a única credencial é um token de admin compartilhado (sem usuários
+autenticados), as regras 7 e 8 não se aplicam: toda rota protegida já é de admin.
 
 ---
 
@@ -774,7 +901,7 @@ rotas de privilégio.
 2. **Segurança crítica** (T-02, T-03) — SQL injection e senha antes de mexer em mais nada.
 3. **Estado e estrutura** (T-04, T-05) — remove globals, quebra o God Class em camadas.
 4. **Fluxo de request** (T-06) — controllers assumindo a lógica que estava na rota.
-5. **Cross-cutting** (T-07, T-15) — error handler central e, sobre ele, a autenticação deny-by-default (T-15 depende das exceções tipadas do T-07).
+5. **Cross-cutting** (T-07, T-15) — error handler central e, sobre ele, a autenticação deny-by-default (T-15 depende das exceções tipadas do T-07). As regras de papel e dono do recurso do T-15 entram nos controllers criados no passo 4.
 6. **Assíncrono e performance** (T-08, T-09) — só depois que a estrutura já está estável.
 7. **Integridade de dados** (T-10) e **API deprecated** (T-11).
 8. **Limpeza** (T-12, T-13, T-14) e remoção final dos arquivos legados.
@@ -790,27 +917,47 @@ Para Python/Flask:
 pip install -r requirements.txt
 
 # 1) boot sem o segredo precisa falhar com mensagem clara (fail-fast)
-env -u SECRET_KEY python app.py; echo "exit=$?"   # esperado: exit != 0 e "SECRET_KEY não definida"
+#    (atribuir vazio em vez de `env -u`: funciona também com shims como mise/pyenv e com .env presente)
+SECRET_KEY= python app.py; echo "exit=$?"   # esperado: exit != 0 e "SECRET_KEY não definida"
 
 # 2) boot normal
 export SECRET_KEY=test-secret-validation
 python app.py &
 APP_PID=$!
 sleep 3
-curl -sS http://localhost:5000/ | head                                     # pública → 200
-curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:5000/<rota-protegida>        # → 401
-curl -sS -o /dev/null -w '%{http_code}\n' -H 'Authorization: Bearer invalido' http://localhost:5000/<rota-protegida>  # → 401
-TOKEN=$(curl -sS -X POST http://localhost:5000/login -H 'Content-Type: application/json' \
-        -d '{"email":"<admin-do-seed>","password":"<senha>"}' | python -c 'import sys,json; print(json.load(sys.stdin)["token"])')
-curl -sS -H "Authorization: Bearer $TOKEN" http://localhost:5000/<rota-protegida> | head  # → 2xx
-# token de usuário comum numa rota de admin → 403
+B=http://localhost:5000
+code() { curl -sS -o /dev/null -w '%{http_code}\n' "$@"; }
+login() { curl -sS -X POST $B/login -H 'Content-Type: application/json' -d "$1" \
+          | python -c 'import sys,json; d=json.load(sys.stdin); print(d.get("token") or d["dados"]["token"])'; }
+
+curl -sS $B/ | head                                                  # pública → 200
+code $B/<rota-protegida>                                             # → 401
+code -H 'Authorization: Bearer invalido' $B/<rota-protegida>         # → 401
+ADMIN=$(login '{"email":"<admin-do-seed>","password":"<senha>"}')
+USER=$(login '{"email":"<usuario-comum-do-seed>","password":"<senha>"}')
+code -H "Authorization: Bearer $ADMIN" $B/<rota-protegida>           # → 2xx
+code -H "Authorization: Bearer $USER"  $B/<rota-admin>               # → 403
+
+# 3) papel (regra 7): usuário comum tentando se promover → 403, e o papel não muda
+code -X PUT -H "Authorization: Bearer $USER" -H 'Content-Type: application/json' \
+     -d '{"role":"admin"}' $B/users/<id-do-usuario-comum>             # → 403
+# 4) dono do recurso (regra 8): usuário comum acessando/alterando dado de outro → 403
+code -H "Authorization: Bearer $USER" $B/<rota-com-id-de-outro-usuario>          # → 403
+code -X PUT -H "Authorization: Bearer $USER" -H 'Content-Type: application/json' \
+     -d '{"password":"x1234"}' $B/users/<id-do-admin>                 # → 403
+#    id de dono no corpo é ignorado: crie um recurso enviando o id de OUTRO usuário e
+#    confira (como admin) que ele ficou no usuário do token
 kill $APP_PID
 ```
+
+Adapte os paths ao projeto (`/usuarios`, `tipo`, `senha` etc.). Os passos 3 e 4 se
+aplicam sempre que existirem usuários autenticados com papéis diferentes; com uma única
+credencial de admin, registre-os como "n/a" no output.
 
 Para Node.js/Express:
 ```bash
 npm install
-env -u ADMIN_TOKEN node src/app.js; echo "exit=$?"        # esperado: exit != 0
+ADMIN_TOKEN= node src/app.js; echo "exit=$?"              # esperado: exit != 0
 export ADMIN_TOKEN=test-admin-token
 node src/app.js &
 APP_PID=$!
@@ -822,5 +969,6 @@ curl -sS -H "X-Admin-Token: $ADMIN_TOKEN" http://localhost:3000/<rota-admin> | h
 kill $APP_PID
 ```
 
-Se qualquer comando retornar 5xx, não conectar, ou uma rota protegida responder 2xx sem
-credencial, **corrija antes de declarar sucesso**.
+Se qualquer comando retornar 5xx, não conectar, uma rota protegida responder 2xx sem
+credencial, ou um usuário comum conseguir alterar o próprio papel ou o dado de outro
+usuário, **corrija antes de declarar sucesso**.

@@ -53,9 +53,11 @@ e recomendação.
 - segredo de assinatura/token de admin com default literal ou vazio (`os.environ.get("SECRET_KEY", "dev-...")`, `process.env.ADMIN_TOKEN || ''`) — o default está no repositório, então qualquer um forja token;
 - `jwt.decode` sem `algorithms=[...]` ou com verificação de assinatura desligada;
 - token/API key comparado com `==`/`===` em vez de comparação em tempo constante;
-- proteção só por decorator em cada rota, sem default fechado — rota nova esquecida fica aberta.
-**Impacto:** qualquer usuário anônimo alcança funcionalidade administrativa ou forja identidade.
-**Recomendação:** autenticação deny-by-default (playbook **T-15**): guard global no app/router com allowlist explícita de rotas públicas, segredo obrigatório no boot, verificação de JWT com algoritmo fixo e `require_role` nas operações de privilégio.
+- proteção só por decorator em cada rota, sem default fechado — rota nova esquecida fica aberta;
+- **escalação de privilégio por campo:** rota de update (`PUT/PATCH /users/<id>`) acessível a qualquer autenticado cujo schema/controller aceita `role`/`tipo`/`is_admin`/`active` do payload; `setattr` em loop sobre o payload sem allowlist de campos (mass assignment);
+- **IDOR (dono do recurso não conferido):** id de usuário vindo do corpo/query (`dados.get("usuario_id")`, `req.body.userId`, inclusive como fallback `... or g.current_user["id"]`); rota com id de usuário no path (`/users/<id>`, `/pedidos/usuario/<id>`, `/users/<id>/tasks`) que não compara esse id com a identidade autenticada.
+**Impacto:** qualquer usuário anônimo alcança funcionalidade administrativa ou forja identidade; qualquer usuário autenticado se promove a admin ou lê/altera dados de outros usuários.
+**Recomendação:** autenticação/autorização deny-by-default (playbook **T-15**): guard global no app/router com allowlist explícita de rotas públicas, segredo obrigatório no boot, verificação de JWT com algoritmo fixo, `require_role` nas operações de privilégio, campos de privilégio graváveis só por admin e checagem de dono do recurso no controller com a identidade do token.
 
 ### AP-07 — Validação de entrada ausente na rota
 **Severidade:** MEDIUM
@@ -183,6 +185,7 @@ encontrado ainda.
 - [ ] Cobri as 5 categorias (Segurança, Arquitetura/MVC, Dados/Performance, Qualidade, APIs Obsoletas)?
 - [ ] A checagem de APIs Obsoletas (OBS-01 a OBS-08) foi feita, mesmo que nada tenha sido encontrado?
 - [ ] Se há login/token, encontrei onde ele é **verificado**? Se não há verificador, o AP-06 entrou no relatório?
+- [ ] Para cada rota que recebe id de usuário (path, corpo ou query), conferi se ele é comparado com a identidade autenticada? Para cada update de usuário, conferi quem pode gravar `role`/`active`?
 - [ ] Cada finding tem arquivo + linha?
 - [ ] Tenho ≥ 5 findings, com ≥ 1 CRITICAL ou HIGH?
 
