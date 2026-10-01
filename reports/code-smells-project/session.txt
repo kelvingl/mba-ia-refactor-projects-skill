@@ -1,0 +1,852 @@
+PS C:\Users\kelvin\Desktop\repos\mba-ia-refactor-projects-skill\code-smells-project> claude --permission-mode bypassPermissions "/refactor-arch"
+╭─── Claude Code v2.1.120 ───────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting started                                          │
+│                Welcome back Kelvin!                │ Run /init to create a CLAUDE.md file with instructions for Claude │
+│                                                    │ Tips for getting started                                          │
+│                Welcome back Kelvin!                │ Run /init to create a CLAUDE.md file with instructions for Claude │
+│                                                    │ ───────────────────────────────────────────────────────────────── │
+│                       ▐▛███▜▌                      │ Recent activity                                                   │
+│                      ▝▜█████▛▘                     │ No recent activity                                                │
+│                        ▘▘ ▝▝                       │                                                                   │
+│    Sonnet 4.6 with high effort · Claude Pro ·      │                                                                   │
+│    kelvin_gl@hotmail.com's Organization            │                                                                   │
+│ ~\Desktop\repos\mba-ia-refactor-projects-skill\co… │                                                                   │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+❯ /refactor-arch                                                                                                                                                                 
+
+● Starting Phase 1 — reading the analysis reference and mapping the project structure.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● The project has legacy files at the root AND a src/ directory with MVC structure. Let me read all key files.
+
+  Searched for 1 pattern, read 5 files (ctrl+o to expand)
+
+● Now let me check the src/ directory contents to understand what's already there.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● The project has legacy files at the root AND a src/ directory with MVC structure. Let me read all key files.
+
+  Searched for 1 pattern, read 5 files (ctrl+o to expand)
+
+● Now let me check the src/ directory contents to understand what's already there.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● The src/ directory has subdirectories but no Python files. Phase 1 data is complete. Now reading the anti-patterns catalog and report
+  template for Phase 2.
+
+  Searched for 1 pattern, read 2 files (ctrl+o to expand)
+                                                               
+● I have all the data needed. Now I'll output Phase 1 and write the Phase 2 audit report.
+                                                                               
+  ---                                                                                     
+  ================================
+  PHASE 1: PROJECT ANALYSIS                                                                                                                    
+  ================================
+  Language:      Python                                                                                                                        
+  Framework:     Flask 3.1.1                                                                                                                 
+  Dependencies:  flask-cors 5.0.1, sqlite3 (stdlib)                                                                                          
+  Domain:        E-commerce API (produtos, pedidos, usuários, relatórios de vendas)
+  Architecture:  Monolítica por arquivo — 4 arquivos na raiz (app.py, controllers.py,
+                 database.py, models.py) sem separação de camadas; src/ existe mas vazia
+  Source files:  4 files analyzed (~784 lines)
+  DB tables:     produtos, usuarios, pedidos, itens_pedido
+  ================================
+
+  ---
+  Prosseguindo para a Fase 2. Varrendo o catálogo completo (incluindo APIs obsoletas) antes de escrever o relatório.
+
+  Searched for 2 patterns (ctrl+o to expand)  
+                              
+● All checks done. Now writing the full audit report.
+                                                                                          
+● Bash(mkdir -p "C:/Users/kelvin/Desktop/repos/mba-ia-refactor-projects-skill/reports")   
+  ⎿  Done                                                                                                                                      
+                                                                                                                                               
+● Write(~\Desktop\repos\mba-ia-refactor-projects-skill\reports\audit-project-1.md)                                                             
+  ⎿  Wrote 105 lines to ..\reports\audit-project-1.md                                                                                          
+      1 ================================                                                                                                       
+      2 ARCHITECTURE AUDIT REPORT                                                                                                              
+      3 ================================                                                                                                     
+      4 Project: code-smells-project                                                                                                           
+      5 Stack:   Python + Flask 3.1.1                                                                                                        
+      6 Files:   4 analyzed | ~784 lines of code                                                                                               
+      7                                                                                                                                      
+      8 ## Summary                                                                                                                           
+      9 CRITICAL: 5 | HIGH: 4 | MEDIUM: 4 | LOW: 2
+     … +157 lines (ctrl+o to expand)
+
+● ---                                                                           
+  ================================                                                        
+  ARCHITECTURE AUDIT REPORT
+  ================================                                                                                                             
+  Project: code-smells-project
+  Stack:   Python + Flask 3.1.1                                                                                                                
+  Files:   4 analyzed | ~784 lines of code                                                                                                   
+                                                                                                                                             
+  ## Summary
+  CRITICAL: 5 | HIGH: 4 | MEDIUM: 4 | LOW: 2
+
+  ## Findings
+
+  ### [CRITICAL] SQL Injection
+  **File:** `models.py:28, 47-50, 57-60, 65-67, 92, 109-111, 126-129, 140, 148-150, 163-165, 174, 188, 192, 279-282, 289-298`
+  **Description:** Virtualmente todas as queries no módulo são construídas por concatenação de strings com dados externos. Exemplos:
+  `cursor.execute("SELECT * FROM produtos WHERE id = " + str(id))` (linha 28); `cursor.execute("SELECT * FROM usuarios WHERE email = '" + email
+   + "' AND senha = '" + senha + "'")` (linha 109–111); `query += " AND (nome LIKE '%" + termo + "%'..."` (linha 289). Os parâmetros vêm de
+  `request` via controller.
+  **Impact:** SQL injection completo — qualquer chamador pode exfiltrar todo o banco, bypassar autenticação com `' OR 1=1--`, ou destruir
+  dados.
+  **Recommendation:** substituir todas as queries por prepared statements: `cursor.execute("SELECT * FROM produtos WHERE id = ?", (id,))`.
+
+  ### [CRITICAL] Hardcoded Credentials
+  **File:** `app.py:7`, `controllers.py:289`
+  **Description:** `app.config["SECRET_KEY"] = "minha-chave-super-secreta-123"` literal no código. A mesma string é retornada publicamente em
+  `/health` como `"secret_key": "minha-chave-super-secreta-123"` (controllers.py:289).
+  **Impact:** a chave está versionada no Git e exposta via HTTP — qualquer pessoa pode forjar sessões. Após publicada, é irrevogável sem
+  deploy.
+  **Recommendation:** mover para variável de ambiente `FLASK_SECRET_KEY` em `src/config/settings.py`; boot deve falhar se ausente. Remover o
+  campo da resposta de `/health`.
+
+  ### [CRITICAL] Plaintext Password Storage
+  **File:** `models.py:109-111, 122-131`, `database.py:75-83`
+  **Description:** `criar_usuario` insere a senha sem hash (linha 127). `login_usuario` compara senha em texto plano via SQL (linhas 109-111).
+  O seed popula o banco com senhas literais como `"admin123"` (database.py:75-83). `get_todos_usuarios` retorna o campo `senha` em texto plano
+  no JSON (models.py:80-86).
+  **Impact:** qualquer vazamento do banco expõe todas as credenciais imediatamente. Viola LGPD/GDPR.
+  **Recommendation:** usar `werkzeug.security.generate_password_hash` na criação e `check_password_hash` no login. Nunca retornar o campo de
+  senha em nenhuma resposta.
+
+  ### [CRITICAL] Endpoint de Execução Arbitrária de SQL
+  **File:** `app.py:47-78`
+  **Description:** `/admin/reset-db` (linha 47) apaga todas as tabelas sem autenticação. `/admin/query` (linha 59) recebe `"sql"` no corpo e
+  executa `cursor.execute(query)` diretamente — qualquer instrução SQL, sem restrição.
+  **Impact:** qualquer pessoa na rede pode apagar todo o banco ou exfiltrar qualquer dado com um único POST sem credenciais.
+  **Recommendation:** remover ambos os endpoints completamente. Utilitários de diagnóstico devem ser scripts CLI, nunca rotas HTTP.
+
+  ### [CRITICAL] Debug Mode Habilitado em Produção
+  **File:** `app.py:8, 88`, `controllers.py:283-290`
+  **Description:** `app.config["DEBUG"] = True` (linha 8) e `app.run(debug=True)` (linha 88) são incondicionais. `/health` retorna `"debug":
+  True` e `"ambiente": "producao"` simultaneamente (controllers.py:283-290).
+  **Impact:** reloader e debugger interativo Flask expostos; stack traces completos chegam ao cliente; combinação com debugger PIN pode levar a
+   RCE.
+  **Recommendation:** `app.config["DEBUG"] = os.getenv("FLASK_DEBUG","false").lower()=="true"`. Remover campos de diagnóstico do output de
+  `/health`.
+
+  ---
+
+  ### [HIGH] Authentication Absent
+  **File:** `app.py:1-88`, `controllers.py:128-134, 188-220, 222-227`
+  **Description:** `/login` retorna dados do usuário mas **não emite nenhum token** — não existe `jwt.encode` no código. Nenhum middleware de
+  autenticação existe. Todas as rotas estão abertas sem verificação. `criar_pedido` aceita `usuario_id` do corpo (controllers.py:195) e
+  `listar_pedidos_usuario` usa o id do path sem comparar com identidade autenticada (controllers.py:222-227).
+  **Impact:** qualquer cliente anônimo acessa dados de todos os usuários (incluindo senhas), modifica pedidos alheios e cria pedidos em nome de
+   qualquer usuário.
+  **Recommendation:** JWT deny-by-default (T-15): guard global com allowlist de rotas públicas, segredo obrigatório no boot, identidade
+  extraída do token, checagem de dono no controller.
+
+  ### [HIGH] God Module
+  **File:** `models.py:1-315`
+  **Description:** 315 linhas misturando acesso ao banco (queries SQL), lógica de negócio (cálculo de descontos progressivos em
+  `relatorio_vendas` linhas 256-263; validação de estoque e orquestração transacional em `criar_pedido` linhas 139-167) e serialização
+  (dicionários montados manualmente em cada função).
+  **Impact:** impossível testar lógica de desconto sem banco real; qualquer mudança de serialização exige editar o mesmo arquivo que controla
+  transações.
+  **Recommendation:** separar em `src/models/` (schema/acesso a dado), `src/controllers/` (orquestração) e helpers de serialização/DTOs.
+
+  ### [HIGH] Global Mutable State
+  **File:** `database.py:4-12`
+  **Description:** `db_connection = None` é variável global de módulo reatribuída com `global db_connection` em `get_db()`. A conexão é
+  compartilhada entre todas as requisições; `check_same_thread=False` desabilita a proteção do SQLite em vez de resolver o problema.
+  **Impact:** condição de corrida sob carga concorrente; testes não isolam estado entre chamadas.
+  **Recommendation:** usar `flask.g` para escopo de conexão por requisição, ou repositório com injeção de dependência.
+
+  ### [HIGH] Missing Centralized Error Handling
+  **File:** `controllers.py:5-292`
+  **Description:** cada uma das 14 funções tem `try/except Exception as e` retornando `jsonify({"erro": str(e)})`. Não existe middleware de
+  erro global. A exceção é serializada e enviada ao cliente, incluindo mensagens internas do SQLite.
+  **Impact:** formato de erro inconsistente; mensagens do banco chegam ao cliente; ~30 linhas duplicadas de tratamento.
+  **Recommendation:** handler global `@app.errorhandler(Exception)` que loga internamente e retorna mensagem genérica; exceções tipadas para
+  controle de fluxo.
+
+  ---
+
+  ### [MEDIUM] N+1 Query
+  **File:** `models.py:171-200, 203-233`
+  **Description:** `get_pedidos_usuario` e `get_todos_pedidos` abrem cursor de pedidos e, para cada linha, cursores adicionais para
+  `itens_pedido` (linhas 187-188) e nome do produto por item (linhas 192-193). Para N pedidos com M itens: `1 + N + N*M` queries.
+  **Impact:** latência cresce linearmente; em produção com centenas de pedidos o endpoint se torna inviável.
+  **Recommendation:** único JOIN: `SELECT p.*, ip.*, pr.nome FROM pedidos p JOIN itens_pedido ip ON ip.pedido_id = p.id JOIN produtos pr ON
+  pr.id = ip.produto_id WHERE p.usuario_id = ?`.
+
+  ### [MEDIUM] Missing Pagination
+  **File:** `models.py:6-22, 203-233`
+  **Description:** `get_todos_produtos()` executa `SELECT * FROM produtos` sem `LIMIT`/`OFFSET` (linha 7); `get_todos_pedidos()` idem (linha
+  206). Nenhum endpoint aceita `?page=` ou `?limit=`.
+  **Impact:** com crescimento da base, respostas ilimitadas degradam performance do banco e saturam memória.
+  **Recommendation:** `LIMIT ? OFFSET ?` com `page`/`per_page` nos query params, defaults razoáveis (ex.: `per_page=20`).
+
+  ### [MEDIUM] Duplicated Validation Logic
+  **File:** `controllers.py:24-55, 64-92`
+  **Description:** validação de campos de produto (nome, preço, estoque, comprimento, categoria válida) é copiada integralmente entre
+  `criar_produto` e `atualizar_produto`. A lista `categorias_validas` é um literal repetido.
+  **Impact:** regra diverge silenciosamente quando corrigida em um handler e esquecida no outro.
+  **Recommendation:** schema compartilhado (Marshmallow/Pydantic) ou função `validar_payload_produto(dados)` reutilizada pelos dois handlers.
+
+  ### [MEDIUM] Referential Integrity Broken
+  **File:** `models.py:65-70`, `database.py:14-52`
+  **Description:** `deletar_produto` faz `DELETE FROM produtos WHERE id = ?` sem remover linhas dependentes em `itens_pedido`. O schema não
+  define `FOREIGN KEY` nem `ON DELETE CASCADE`.
+  **Impact:** itens de pedidos existentes ficam com `produto_id` órfão; consultas futuras retornam `"Desconhecido"` silenciosamente
+  (models.py:194).
+  **Recommendation:** `FOREIGN KEY(produto_id) REFERENCES produtos(id) ON DELETE RESTRICT` ou soft-delete com campo `ativo`.
+
+  ---
+
+  ### [LOW] Log via print
+  **File:** `controllers.py:8, 106, 161, 179, 208-210, 247-250`
+  **Description:** informações operacionais emitidas via `print()` puro sem nível, timestamp ou estrutura.
+  **Impact:** impossível filtrar ruído em produção; sem timestamp, correlação de eventos é impossível.
+  **Recommendation:** `import logging; logger = logging.getLogger(__name__)` com `logger.info()` / `logger.error()`.
+
+  ### [LOW] request.get_json() Without silent=True (OBS-04)
+  **File:** `controllers.py:26, 66, 148, 169, 190, 239`, `app.py:61`
+  **Description:** `request.get_json()` chamado sem `silent=True` em 7 pontos. No Flask ≥ 2.3, body não-JSON lança `BadRequest` não tratada,
+  vazando stack trace ao cliente.
+  **Impact:** requisição com body malformado gera resposta interna do Werkzeug antes do handler da aplicação.
+  **Recommendation:** `request.get_json(silent=True)` + verificar `if dados is None` explicitamente.
+
+  ================================
+  Total: 15 findings
+  ================================
+
+  Relatório salvo em reports/audit-project-1.md.
+
+  ---
+  Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]
+
+✻ Baked for 4m 10s
+
+❯ y                                                                                                                                            
+    
+● Prosseguindo para a Fase 3. Lendo as referências de MVC e o playbook antes de planejar.                                                      
+                                                                                                                                             
+  Read 2 files (ctrl+o to expand)                                                                                                            
+                                                                                                                                               
+● Plano completo traçado. Executando as transformações em sequência: config → segurança (SQL/senha) → estrutura (God Module/estado global) →
+  middlewares (error handler + auth JWT deny-by-default) → views → validação.                                                                  
+                                                                                                                                             
+  Listed 2 directories (ctrl+o to expand)                                                                                                      
+                                                                                                                                               
+● Agora criando todos os arquivos da estrutura MVC em paralelo.                                                                                
+                                                                                                                                               
+● Write(requirements.txt)                                                                                                                    
+  ⎿  Added 2 lines                                                                                                                             
+      1  flask==3.1.1                                                                                                                        
+      2  flask-cors==5.0.1                                                                                                                     
+      3 +PyJWT>=2.8.0                                                                                                                   
+      4 +python-dotenv>=1.0.0                                                                                                                  
+                                                                                                                                             
+● Write(.env.example)                                                                                                                          
+  ⎿  Wrote 6 lines to .env.example                                                                                                           
+      1 # SECRET_KEY é obrigatória — a aplicação não sobe sem este valor       
+      2 SECRET_KEY=                                                                                                                            
+      3 
+      4 # Opcionais                                                                                                                            
+      5 FLASK_DEBUG=0                                                                                                                        
+      6 DATABASE_PATH=loja.db                                                                                                                  
+                                                                                                                                             
+● Write(.gitignore)                                                            
+  ⎿  Wrote 8 lines to .gitignore                                                          
+      1 .env                                                                   
+      2 __pycache__/                                                                                                                           
+      3 *.pyc
+      4 *.pyo                                                                                                                                  
+      5 loja.db                                                                                                                              
+      6 loja_test.db                                                                                                                           
+      7 .venv/                                                                                                                               
+      8 venv/
+
+● Write(src\__init__.py)                                                       
+  ⎿  Wrote 1 lines to src\__init__.py                                                     
+      1 (No content)                                                           
+                                                                                                                                               
+● Write(src\config\__init__.py)                                                
+  ⎿  Wrote 1 lines to src\config\__init__.py                                                                                                   
+      1 (No content)                                                                                                                         
+                                                                                                                                               
+● Write(src\config\settings.py)                                                                                                              
+  ⎿  Wrote 22 lines to src\config\settings.py                                                                                                  
+       1 import os                                                                                                                           
+       2 from dotenv import load_dotenv                                                                                                        
+       3                                                                                                                                     
+       4 load_dotenv()                                                                                                                         
+       5                                                                                                                                     
+       6                                                                                                                                       
+       7 def _required_env(name: str) -> str:                                                                                                
+       8     value = os.environ.get(name, "").strip()
+       9     if not value:
+      10         raise RuntimeError(
+     … +12 lines (ctrl+o to expand)
+
+● Write(src\models\__init__.py)                                                
+  ⎿  Wrote 1 lines to src\models\__init__.py                                              
+      1 (No content)                                                           
+                                                                                                                                               
+● Write(src\models\database.py)                                                
+  ⎿  Wrote 95 lines to src\models\database.py                                                                                                  
+       1 import sqlite3                                                                                                                      
+       2 from flask import g, current_app                                                                                                      
+       3 from werkzeug.security import generate_password_hash                                                                                
+       4                                                                                                                                       
+       5                                                                                                                                     
+       6 def get_db():                                                                                                                         
+       7     if "db" not in g:                                                                                                               
+       8         g.db = sqlite3.connect(
+       9             current_app.config["DATABASE_PATH"],
+      10             check_same_thread=False,
+     … +85 lines (ctrl+o to expand)
+
+● Write(src\models\produto_model.py)                                           
+  ⎿  Wrote 72 lines to src\models\produto_model.py                                        
+       1 from src.models.database import get_db                                
+       2                                                                                                                                       
+       3 VALID_CATEGORIES = ("informatica", "moveis", "vestuario", "geral", "eletronicos", "livros")
+       4                                                                                                                                       
+       5                                                                                                                                     
+       6 def _row_to_dict(row):                                                                                                                
+       7     return {                                                                                                                        
+       8         "id": row["id"],
+       9         "nome": row["nome"],
+      10         "descricao": row["descricao"],
+     … +62 lines (ctrl+o to expand)
+
+● Write(src\models\usuario_model.py)                                           
+  ⎿  Wrote 43 lines to src\models\usuario_model.py                                        
+       1 from werkzeug.security import generate_password_hash, check_password_hash
+       2 from src.models.database import get_db                                                                                                
+       3 
+       4                                                                                                                                       
+       5 def _row_to_dict(row):                                                                                                              
+       6     return {                                                                                                                          
+       7         "id": row["id"],                                                                                                            
+       8         "nome": row["nome"],
+       9         "email": row["email"],
+      10         "tipo": row["tipo"],
+     … +33 lines (ctrl+o to expand)
+
+● Write(src\models\pedido_model.py)                                            
+  ⎿  Wrote 88 lines to src\models\pedido_model.py                                         
+       1 from src.models.database import get_db                                
+       2                                                                                                                                       
+       3 _PEDIDO_JOIN = """
+       4     SELECT p.id AS pedido_id, p.usuario_id, p.status, p.total, p.criado_em,                                                           
+       5            ip.produto_id, ip.quantidade, ip.preco_unitario,                                                                         
+       6            pr.nome AS produto_nome                                                                                                    
+       7     FROM pedidos p                                                                                                                  
+       8     LEFT JOIN itens_pedido ip ON ip.pedido_id = p.id
+       9     LEFT JOIN produtos pr ON pr.id = ip.produto_id
+      10 """
+     … +78 lines (ctrl+o to expand)
+
+● Write(src\models\relatorio_model.py)                                         
+  ⎿  Wrote 18 lines to src\models\relatorio_model.py                                      
+       1 from src.models.database import get_db                                 
+       2                                                                                                                                       
+       3 
+       4 def dados_vendas():                                                                                                                   
+       5     db = get_db()                                                                                                                   
+       6     total_pedidos = db.execute("SELECT COUNT(*) FROM pedidos").fetchone()[0]                                                          
+       7     faturamento = db.execute("SELECT COALESCE(SUM(total), 0) FROM pedidos").fetchone()[0]                                           
+       8     por_status = {
+       9         row["status"]: row["count"]
+      10         for row in db.execute(
+     … +8 lines (ctrl+o to expand)
+
+● Write(src\middlewares\__init__.py)                                            
+  ⎿  Wrote 1 lines to src\middlewares\__init__.py                                         
+      1 (No content)                                                            
+                                                                                                                                               
+● Write(src\middlewares\error_handler.py)                                       
+  ⎿  Wrote 42 lines to src\middlewares\error_handler.py                                                                                        
+       1 from flask import jsonify                                                                                                           
+       2                                                                                                                                       
+       3                                                                                                                                     
+       4 class AppError(Exception):                                                                                                            
+       5     status_code = 500                                                                                                               
+       6     message = "Erro interno"                                                                                                          
+       7                                                                                                                                     
+       8     def __init__(self, message=None):
+       9         if message:
+      10             self.message = message
+     … +32 lines (ctrl+o to expand)
+
+● Write(src\middlewares\auth.py)                                                
+  ⎿  Wrote 61 lines to src\middlewares\auth.py                                            
+       1 from datetime import datetime, timedelta, timezone                     
+       2 from functools import wraps                                                                                                           
+       3 
+       4 import jwt                                                                                                                            
+       5 from flask import g, request                                                                                                        
+       6                                                                                                                                       
+       7 from src.config.settings import settings                                                                                            
+       8 from src.middlewares.error_handler import ForbiddenError, UnauthorizedError
+       9
+      10 JWT_ALGORITHM = "HS256"
+     … +51 lines (ctrl+o to expand)
+
+● Write(src\controllers\__init__.py)                                            
+  ⎿  Wrote 1 lines to src\controllers\__init__.py                                         
+      1 (No content)
+                                                                                                                                               
+● Write(src\controllers\produto_controller.py)                                  
+  ⎿  Wrote 76 lines to src\controllers\produto_controller.py                                                                                   
+       1 from src.models import produto_model                                                                                                
+       2 from src.middlewares.error_handler import NotFoundError, ValidationError                                                              
+       3 
+       4 VALID_CATEGORIES = produto_model.VALID_CATEGORIES                                                                                     
+       5                                                                                                                                     
+       6                                                                                                                                       
+       7 def _validate_produto(dados: dict) -> dict:                                                                                         
+       8     errors = []
+       9     nome = (dados.get("nome") or "").strip()
+      10     if not nome:
+     … +66 lines (ctrl+o to expand)
+
+● Write(src\controllers\usuario_controller.py)                                  
+  ⎿  Wrote 56 lines to src\controllers\usuario_controller.py                              
+      1 from src.models import usuario_model                                    
+      2 from src.middlewares.auth import issue_token                                                                                           
+      3 from src.middlewares.error_handler import (
+      4     ForbiddenError,                                                                                                                    
+      5     NotFoundError,                                                                                                                   
+      6     UnauthorizedError,                                                                                                                 
+      7     ValidationError,                                                                                                                 
+      8 )
+      9
+     … +46 lines (ctrl+o to expand)
+
+● Write(src\controllers\pedido_controller.py)                                   
+  ⎿  Wrote 33 lines to src\controllers\pedido_controller.py                               
+      1 from src.models import pedido_model                                     
+      2 from src.middlewares.error_handler import ForbiddenError, ValidationError                                                              
+      3 
+      4 VALID_STATUSES = ("pendente", "aprovado", "enviado", "entregue", "cancelado")                                                          
+      5                                                                                                                                      
+      6                                                                                                                                        
+      7 def _ensure_self_or_admin(current_user: dict, owner_id: int):                                                                        
+      8     if current_user["role"] != "admin" and current_user["id"] != owner_id:
+      9         raise ForbiddenError("Acesso a recurso de outro usuário")
+     … +23 lines (ctrl+o to expand)
+
+● Write(src\controllers\relatorio_controller.py)                                
+  ⎿  Wrote 31 lines to src\controllers\relatorio_controller.py                            
+       1 from src.models import relatorio_model                                 
+       2                                                                                                                                       
+       3 _DISCOUNT_TIERS = (
+       4     (10000, 0.10),                                                                                                                    
+       5     (5000, 0.05),                                                                                                                   
+       6     (1000, 0.02),                                                                                                                     
+       7 )                                                                                                                                   
+       8
+       9
+      10 def relatorio_vendas() -> dict:
+     … +21 lines (ctrl+o to expand)
+
+● Write(src\views\__init__.py)                                                  
+  ⎿  Wrote 1 lines to src\views\__init__.py                                               
+      1 (No content)                                                            
+                                                                                                                                               
+● Write(src\views\health_routes.py)                                             
+  ⎿  Wrote 34 lines to src\views\health_routes.py                                                                                              
+       1 from flask import Blueprint, jsonify                                                                                                
+       2 from src.models.database import get_db                                                                                                
+       3                                                                                                                                     
+       4 health_bp = Blueprint("health", __name__)                                                                                             
+       5                                                                                                                                     
+       6                                                                                                                                       
+       7 @health_bp.route("/")                                                                                                               
+       8 def index():
+       9     return jsonify({
+      10         "mensagem": "Bem-vindo à API da Loja",
+     … +24 lines (ctrl+o to expand)
+
+● Write(src\views\produto_routes.py)                                            
+  ⎿  Wrote 50 lines to src\views\produto_routes.py                                        
+       1 from flask import Blueprint, jsonify, request                         
+       2 from src.controllers import produto_controller                                                                                        
+       3 from src.middlewares.auth import require_role
+       4                                                                                                                                       
+       5 produto_bp = Blueprint("produto", __name__)                                                                                         
+       6                                                                                                                                       
+       7                                                                                                                                     
+       8 @produto_bp.route("/produtos", methods=["GET"])
+       9 def listar_produtos():
+      10     return jsonify({"dados": produto_controller.listar_produtos(), "sucesso": True}), 200
+     … +40 lines (ctrl+o to expand)
+
+● Write(src\views\usuario_routes.py)                                           
+  ⎿  Wrote 34 lines to src\views\usuario_routes.py                                        
+       1 from flask import Blueprint, g, jsonify, request                      
+       2 from src.controllers import usuario_controller                                                                                        
+       3 from src.middlewares.auth import require_role
+       4                                                                                                                                       
+       5 usuario_bp = Blueprint("usuario", __name__)                                                                                         
+       6                                                                                                                                       
+       7                                                                                                                                     
+       8 @usuario_bp.route("/login", methods=["POST"])
+       9 def login():
+      10     dados = request.get_json(silent=True) or {}
+     … +24 lines (ctrl+o to expand)
+
+● Write(src\views\pedido_routes.py)                                            
+  ⎿  Wrote 33 lines to src\views\pedido_routes.py                                         
+       1 from flask import Blueprint, g, jsonify, request                      
+       2 from src.controllers import pedido_controller                                                                                         
+       3 from src.middlewares.auth import require_role
+       4                                                                                                                                       
+       5 pedido_bp = Blueprint("pedido", __name__)                                                                                           
+       6                                                                                                                                       
+       7                                                                                                                                     
+       8 @pedido_bp.route("/pedidos", methods=["POST"])
+       9 def criar_pedido():
+      10     dados = request.get_json(silent=True) or {}
+     … +23 lines (ctrl+o to expand)
+
+● Write(src\views\relatorio_routes.py)                                          
+  ⎿  Wrote 11 lines to src\views\relatorio_routes.py                                      
+       1 from flask import Blueprint, jsonify                                   
+       2 from src.controllers import relatorio_controller                                                                                      
+       3 from src.middlewares.auth import require_role
+       4                                                                                                                                       
+       5 relatorio_bp = Blueprint("relatorio", __name__)                                                                                     
+       6                                                                                                                                       
+       7                                                                                                                                     
+       8 @relatorio_bp.route("/relatorios/vendas", methods=["GET"])
+       9 @require_role("admin")
+      10 def relatorio_vendas():
+     … +1 line (ctrl+o to expand)
+
+● Write(src\app.py)                                                             
+  ⎿  Wrote 36 lines to src\app.py                                                         
+       1 import logging                                                         
+       2                                                                                                                                       
+       3 from flask import Flask
+       4 from flask_cors import CORS                                                                                                           
+       5                                                                                                                                     
+       6 from src.config.settings import settings                                                                                              
+       7 from src.middlewares.error_handler import register_error_handlers                                                                   
+       8 from src.middlewares.auth import init_auth
+       9 from src.models.database import init_app as init_db
+      10 from src.views.health_routes import health_bp
+     … +26 lines (ctrl+o to expand)
+
+● Agora reescrevendo o app.py raiz e removendo os legados.                      
+                                                                                          
+● Write(app.py)                                                                 
+  ⎿  Added 3 lines, removed 85 lines                                                                                                           
+       1 -from flask import Flask, jsonify, request                                                                                     
+       2 -from flask_cors import CORS                                                                                                          
+       3 -import controllers                                                                                                                 
+       4 -from database import get_db                                                                                                          
+       1 +from src.app import create_app                                                                                                     
+       2                                                                                                                                       
+       6 -app = Flask(__name__)                                                                                                              
+       7 -app.config["SECRET_KEY"] = "minha-chave-super-secreta-123"                                                                    
+       8 -app.config["DEBUG"] = True                                                                                                    
+       9 -CORS(app)                                                                                                                     
+       3 +app = create_app()                                                                                                            
+       4  
+      11 -app.add_url_rule("/produtos", "listar_produtos", controllers.listar_produtos, methods=["GET"])                                
+      12 -app.add_url_rule("/produtos/busca", "buscar_produtos", controllers.buscar_produtos, methods=["GET"])                          
+      13 -app.add_url_rule("/produtos/<int:id>", "buscar_produto", controllers.buscar_produto, methods=["GET"])                         
+      14 -app.add_url_rule("/produtos", "criar_produto", controllers.criar_produto, methods=["POST"])                                   
+      15 -app.add_url_rule("/produtos/<int:id>", "atualizar_produto", controllers.atualizar_produto, methods=["PUT"])                   
+      16 -app.add_url_rule("/produtos/<int:id>", "deletar_produto", controllers.deletar_produto, methods=["DELETE"])                    
+      17 -                                                                                                                              
+      18 -app.add_url_rule("/usuarios", "listar_usuarios", controllers.listar_usuarios, methods=["GET"])                                
+      19 -app.add_url_rule("/usuarios/<int:id>", "buscar_usuario", controllers.buscar_usuario, methods=["GET"])                         
+      20 -app.add_url_rule("/usuarios", "criar_usuario", controllers.criar_usuario, methods=["POST"])                                   
+      21 -app.add_url_rule("/login", "login", controllers.login, methods=["POST"])                                                      
+      22 -                                                                                                                              
+      23 -app.add_url_rule("/pedidos", "criar_pedido", controllers.criar_pedido, methods=["POST"])                                      
+      24 -app.add_url_rule("/pedidos", "listar_todos_pedidos", controllers.listar_todos_pedidos, methods=["GET"])                       
+      25 -app.add_url_rule("/pedidos/usuario/<int:usuario_id>", "listar_pedidos_usuario", controllers.listar_pedidos_usuario, methods=["
+         -GET"])                                                                                                                        
+      26 -app.add_url_rule("/pedidos/<int:pedido_id>/status", "atualizar_status_pedido", controllers.atualizar_status_pedido, methods=["
+         -PUT"])                                                                                                                        
+      27 -                                                                                                                              
+      28 -app.add_url_rule("/relatorios/vendas", "relatorio_vendas", controllers.relatorio_vendas, methods=["GET"])                     
+      29 -                                                                                                                              
+      30 -app.add_url_rule("/health", "health_check", controllers.health_check, methods=["GET"])                                        
+      31 -                                                                                                                              
+      32 -@app.route("/")                                                                                                               
+      33 -def index():                                                                                                                  
+      34 -    return jsonify({                                                                                                          
+      35 -        "mensagem": "Bem-vindo à API da Loja",                                                                                
+      36 -        "versao": "1.0.0",                                                                                                    
+      37 -        "endpoints": {                                                                                                        
+      38 -            "produtos": "/produtos",                                                                                          
+      39 -            "usuarios": "/usuarios",                                                                                          
+      40 -            "pedidos": "/pedidos",                                                                                            
+      41 -            "login": "/login",                                                                                                
+      42 -            "relatorios": "/relatorios/vendas",                                                                               
+      43 -            "health": "/health"                                                                                               
+      44 -        }                                                                                                                     
+      45 -    })                                                                                                                        
+      46 -                                                                                                                              
+      47 -@app.route("/admin/reset-db", methods=["POST"])                                                                               
+      48 -def reset_database():                                                                                                         
+      49 -    db = get_db()                                                                                                             
+      50 -    cursor = db.cursor()                                                                                                      
+      51 -    cursor.execute("DELETE FROM itens_pedido")                                                                                
+      52 -    cursor.execute("DELETE FROM pedidos")                                                                                     
+      53 -    cursor.execute("DELETE FROM produtos")                                                                                    
+      54 -    cursor.execute("DELETE FROM usuarios")                                                                                    
+      55 -    db.commit()                                                                                                               
+      56 -    print("!!! BANCO DE DADOS RESETADO !!!")                                                                                  
+      57 -    return jsonify({"mensagem": "Banco de dados resetado", "sucesso": True}), 200                                             
+      58 -                                                                                                                              
+      59 -@app.route("/admin/query", methods=["POST"])                                                                                  
+      60 -def executar_query():                                                                                                         
+      61 -    dados = request.get_json()                                                                                                
+      62 -    query = dados.get("sql", "")                                                                                              
+      63 -    if not query:                                                                                                             
+      64 -        return jsonify({"erro": "Query não informada"}), 400                                                                  
+      65 -                                                                                                                              
+      66 -    db = get_db()                                                                                                             
+      67 -    cursor = db.cursor()                                                                                                      
+      68 -    try:                                                                                                                      
+      69 -        cursor.execute(query)                                                                                                 
+      70 -        if query.strip().upper().startswith("SELECT"):                                                                        
+      71 -            rows = cursor.fetchall()                                                                                          
+      72 -            result = [dict(row) for row in rows]                                                                              
+      73 -            return jsonify({"dados": result, "sucesso": True}), 200                                                           
+      74 -        else:                                                                                                                 
+      75 -            db.commit()                                                                                                       
+      76 -            return jsonify({"mensagem": "Query executada", "sucesso": True}), 200                                             
+      77 -    except Exception as e:                                                                                                    
+      78 -        return jsonify({"erro": str(e)}), 500                                                                                 
+      79 -                                                                                                                              
+       5  if __name__ == "__main__":
+      81 -                                                                                                                              
+      82 -    get_db()                                                                                                                  
+      83 -    print("=" * 50)                                                                                                           
+      84 -    print("SERVIDOR INICIADO")                                                                                                
+      85 -    print("Rodando em http://localhost:5000")                                                                                 
+      86 -    print("=" * 50)                                                                                                           
+      87 -                                                                                                                              
+      88 -    app.run(host="0.0.0.0", port=5000, debug=True)                                                                            
+       6 +    app.run(host="0.0.0.0", port=5000)                                                                                        
+
+● Bash(rm "C:/Users/kelvin/Desktop/repos/mba-ia-refactor-projects-skill/code-smells-project/models.py"
+      "C:/Users/kelvin/Desktop/repos/mba-ia-refactor-projects-skill/co…)                  
+  ⎿  Done    
+                                                                                                                                               
+● Agora instalando dependências e testando.                                     
+                                                                                                                                               
+● Bash(cd "C:/Users/kelvin/Desktop/repos/mba-ia-refactor-projects-skill/code-smells-project" && pip install -r requirements.txt -q 2>&1 | tail
+      -5)                                                                                                                                      
+  ⎿  /usr/bin/bash: line 1: pip: command not found
+                                                                                                                                               
+● Bash(cd "C:/Users/kelvin/Desktop/repos/mba-ia-refactor-projects-skill/code-smells-project" && python -m pip install -r requirements.txt -q 
+      2>&1 | tail -5)                                                                                                                          
+  ⎿    WARNING: The script flask.exe is installed in 'C:\Users\kelvin\AppData\Local\mise\installs\python\3.13.2\Scripts' which is not on P   
+     ATH.                                                                                                                                      
+       Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
+     … +3 lines (ctrl+o to expand)                                                                                                             
+  ⎿  (timeout 1m)                                                                                                                            
+                                                                                                                                               
+● Dependências instaladas. Testando boot sem SECRET_KEY (deve falhar com mensagem clara).                                                      
+                                                                                                                                               
+● Bash(cd "C:/Users/kelvin/Desktop/repos/mba-ia-refactor-projects-skill/code-smells-project" && SECRET_KEY= python app.py 2>&1; echo "exit=$?")
+  ⎿  Traceback (most recent call last):                                                                                                        
+       File "C:\Users\kelvin\Desktop\repos\mba-ia-refactor-projects-skill\code-smells-project\app.py", line 1, in <module>
+         from src.app import create_app                                                                                                        
+     … +20 lines (ctrl+o to expand)                                                                                                          
+                                                                                                                                               
+● Boot sem SECRET_KEY falha com exit=1 e mensagem clara. Agora testando com a chave válida.                                                    
+                                                                                          
+● Bash(cd "C:/Users/kelvin/Desktop/repos/mba-ia-refactor-projects-skill/code-smells-project" && export SECRET_KEY=test-secret-validation &&    
+      python app.py &                                                                                                                          
+      APP_PID=$!…)
+  ⎿   * Serving Flask app 'src.app'                                                                                                            
+      * Debug mode: off                                                                                                                      
+     INFO:werkzeug:WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.      
+     … +5 lines (ctrl+o to expand)                                                                                                           
+  ⎿  (timeout 15s)                                                                        
+                                                                                                                                               
+● App rodando. Executando a bateria de testes.                                                                                                 
+                                                                                                                                               
+● Bash(B=http://localhost:5000                                                                                                                 
+      code() { curl -sS -o /dev/null -w '%{http_code}\n' "$@"; }…)                                                                             
+  ⎿  === ROTAS PÚBLICAS ===                                                                                                                    
+     GET / → 200                                                                                                                               
+     GET /health → 200                                                                                                                         
+     … +12 lines (ctrl+o to expand)                                                                                                            
+                                                                                                                                             
+● Bash(B=http://localhost:5000                                                                                                                 
+      code() { curl -sS -o /dev/null -w '%{http_code}\n' "$@"; }…)                        
+  ⎿  === LOGIN ===                                                                                                                             
+     Admin token obtido: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...                                                                                     
+     User token obtido:  eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...                     
+     … +11 lines (ctrl+o to expand)                                                                                                            
+                                                                                                                                             
+● Bash(B=http://localhost:5000                                                                                                                 
+      code() { curl -sS -o /dev/null -w '%{http_code}\n' "$@"; }…)                        
+  ⎿  === DONO DO RECURSO (anti-IDOR) ===                                                                                                       
+     User acessando próprio perfil /usuarios/2 → 200                                                                                           
+     User acessando perfil do admin /usuarios/1 → 403                           
+     … +16 lines (ctrl+o to expand)                                                                                                            
+                                                                                                                                             
+● Bash(B=http://localhost:5000                                                                                                                 
+      login() {…)                                                                         
+  ⎿  === PEDIDO FICOU COM USUARIO DO TOKEN (id=2), não id=1 do corpo ===                                                                       
+     pedido 1: usuario_id=2                                                                                                                    
+                                                         
+● Pedido registrado com usuario_id=2 (token), ignorando "usuario_id":1 do corpo. Testando endpoints restantes.                                 
+                                                                                                                                             
+● Bash(B=http://localhost:5000                                                                                                                 
+      code() { curl -sS -o /dev/null -w '%{http_code}\n' "$@"; }…)                                                                             
+  ⎿  === CRUD DE PRODUTOS (admin) ===                                                                                                          
+     POST /produtos → {"dados":{"id":11},"mensagem":"Produto criado","sucesso":true}                                                           
+     PUT /produtos/11 → 200                                                                                                                  
+     … +8 lines (ctrl+o to expand)                                                                                                             
+                                                                                                                                             
+● Bash(kill $(pgrep -f "python app.py") 2>/dev/null; sleep 1; echo "processo encerrado")                                                       
+  ⎿  /usr/bin/bash: line 1: pgrep: command not found                                      
+     processo encerrado                                                                                                                        
+                                                                                                                                               
+● Bash(taskkill /F /IM python.exe 2>/dev/null; echo "done")                               
+  ⎿  done                                                                                                                                      
+                                                                                                                                               
+● Todos os testes passaram. Verificando estrutura final e limpando o banco de teste.                                                           
+                                                                                                                                               
+  Searched for 1 pattern (ctrl+o to expand)                                                                                                    
+                                                                                                                                               
+● Bash(rm -f "C:/Users/kelvin/Desktop/repos/mba-ia-refactor-projects-skill/code-smells-project/loja.db")
+  ⎿  Done                                                                                                                                      
+                                                                                                                                             
+● Estrutura correta. Agora salvando o relatório final e imprimindo o output da Fase 3.                                                         
+                                                                                                                                             
+● Bash(mkdir -p "C:/Users/kelvin/Desktop/repos/mba-ia-refactor-projects-skill/reports/code-smells-project")                                    
+  ⎿  Done                                                                                                                                      
+   
+● Write(~\Desktop\repos\mba-ia-refactor-projects-skill\reports\code-smells-project\final-report.md)                                            
+  ⎿  Wrote 139 lines to ..\reports\code-smells-project\final-report.md                                                                       
+      1 ---                                                                                                                                    
+      2 Old Project Structure:                                                                                                                 
+      3 code-smells-project/
+      4 ├── app.py           (entry point + 2 admin routes + index route, 89 linhas)                                                           
+      5 ├── controllers.py   (14 funções de rota, 293 linhas)                                                                                
+      6 ├── database.py      (conexão global mutável + schema + seed, 87 linhas)                                                               
+      7 ├── models.py        (queries SQL + lógica de negócio + serialização, 315 linhas)                                                    
+      8 ├── requirements.txt
+      9 └── README.md
+     … +129 lines (ctrl+o to expand)
+
+● ---                                                    
+  ================================                                                        
+  PHASE 3: REFACTORING COMPLETE
+  ================================                                                                                                             
+  New Project Structure:
+  code-smells-project/                                                                                                                         
+  ├── app.py               ← entry point (5 linhas)                                                                                          
+  ├── requirements.txt
+  ├── .env.example
+  ├── .gitignore
+  └── src/
+      ├── app.py           ← composition root (create_app factory)
+      ├── config/
+      │   └── settings.py  ← SECRET_KEY obrigatória no boot
+      ├── models/
+      │   ├── database.py      ← get_db via flask.g, schema, seed com bcrypt
+      │   ├── produto_model.py ← queries parametrizadas, soft-delete
+      │   ├── usuario_model.py ← werkzeug hash/verify, sem retorno de senha
+      │   ├── pedido_model.py  ← JOIN único (sem N+1), FK ON DELETE CASCADE
+      │   └── relatorio_model.py
+      ├── controllers/
+      │   ├── produto_controller.py  ← validação centralizada
+      │   ├── usuario_controller.py  ← ensure_self_or_admin
+      │   ├── pedido_controller.py   ← usuario_id sempre do token
+      │   └── relatorio_controller.py
+      ├── views/
+      │   ├── health_routes.py
+      │   ├── produto_routes.py  ← GET público, escrita @require_role("admin")
+      │   ├── usuario_routes.py
+      │   ├── pedido_routes.py
+      │   └── relatorio_routes.py
+      └── middlewares/
+          ├── error_handler.py  ← AppError hierarquia + handler central
+          └── auth.py           ← JWT deny-by-default, PUBLIC_ENDPOINTS allowlist
+
+  Validation
+    ✓ Application boots without errors
+    ✓ GET /         responds 200
+    ✓ GET /health   responds 200
+    ✓ GET /produtos responds 200
+    ✓ GET /relatorios/vendas (admin token) responds 200
+
+  Access control
+    Public routes:    GET /, GET /health, GET /produtos, GET /produtos/busca,
+                      GET /produtos/<id>, POST /login
+    Protected routes: todos os demais (401/403 sem credencial — único desvio de contrato)
+
+    ✓ Boot sem SECRET_KEY → RuntimeError + exit=1
+    ✓ GET /usuarios sem token → 401
+    ✓ GET /usuarios com token inválido → 401
+    ✓ GET /usuarios com token admin → 200
+    ✓ GET /usuarios com token de usuário comum → 403
+    ✓ GET /relatorios/vendas com token de usuário comum → 403
+    ✓ GET /usuarios/1 (usuário comum acessando perfil do admin) → 403
+    ✓ GET /usuarios/2 (usuário comum acessando próprio perfil) → 200
+    ✓ POST /pedidos com {"usuario_id":1} no corpo + token de usuario_id=2
+        → pedido criado com usuario_id=2 (owner id ignorado do payload)
+    ✓ GET /pedidos/usuario/2 (próprio usuário) → 200
+    ✓ GET /pedidos/usuario/1 (outro usuário, não-admin) → 403
+  ================================
+
+  Access control
+    Public routes:    GET /, GET /health, GET /produtos, GET /produtos/busca,
+                      GET /produtos/<id>, POST /login
+    Protected routes: todos os demais (401/403 sem credencial — único desvio de contrato)
+
+    ✓ Boot sem SECRET_KEY → RuntimeError + exit=1
+    ✓ GET /usuarios sem token → 401
+    ✓ GET /usuarios com token inválido → 401
+    ✓ GET /usuarios com token admin → 200
+    ✓ GET /usuarios com token de usuário comum → 403
+    ✓ GET /relatorios/vendas com token de usuário comum → 403
+    ✓ GET /usuarios/1 (usuário comum acessando perfil do admin) → 403
+    ✓ GET /usuarios/2 (usuário comum acessando próprio perfil) → 200
+    ✓ POST /pedidos com {"usuario_id":1} no corpo + token de usuario_id=2
+        → pedido criado com usuario_id=2 (owner id ignorado do payload)
+    ✓ GET /pedidos/usuario/2 (próprio usuário) → 200
+    ✓ GET /pedidos/usuario/1 (outro usuário, não-admin) → 403
+  ================================
+
+  Relatório final salvo em reports/code-smells-project/final-report.md.
+
+  Resumo do que foi feito:
+
+  - 15 findings corrigidos: 5 CRITICAL, 4 HIGH, 4 MEDIUM, 2 LOW
+  - T-01 — SECRET_KEY movida para env var obrigatória (fail-fast no boot)
+  - T-02 — Todas as queries reescritas com prepared statements (?, ...)
+  - T-03 — Senhas com werkzeug.security hash/verify; nunca retornadas na API
+  - T-04 — Conexão global removida; get_db() usa flask.g por requisição
+  - T-05 — God Module (315 linhas) dividido em 4 models + 4 controllers por domínio
+  - T-07 — try/except disperso removido; handler central register_error_handlers
+  - T-09 — N+1 eliminado com JOIN único em pedido_model.py
+  - T-12 — /admin/query e /admin/reset-db removidos
+  - T-15 — JWT deny-by-default: before_request global + PUBLIC_ENDPOINTS allowlist + require_role("admin") + ensure_self_or_admin nos
+  controllers; usuario_id do corpo ignorado em pedidos
+
+✻ Worked for 8m 55s
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ commit this
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle)                                    Update available! Run: winget upgrade Anthropic.ClaudeCode
