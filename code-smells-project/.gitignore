@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+loja.db
+loja_test.db
+.venv/
+venv/
