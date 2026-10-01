@@ -1,14 +1,23 @@
 const express = require('express');
-const AppManager = require('./AppManager');
-const { config } = require('./utils');
+const config = require('./config');
+const { getDb, initDb } = require('./models/db');
+const routes = require('./routes');
+const errorHandler = require('./middlewares/errorHandler');
+const logger = require('./utils/logger');
 
 const app = express();
 app.use(express.json());
+app.use(routes);
+app.use(errorHandler);
 
-const manager = new AppManager();
-manager.initDb();
-manager.setupRoutes(app);
+async function start() {
+  await initDb(getDb());
+  app.listen(config.port, () => {
+    logger.info('Ecommerce API running', { port: config.port });
+  });
+}
 
-app.listen(config.port, () => {
-    console.log(`Frankenstein LMS rodando na porta ${config.port}...`);
+start().catch(err => {
+  console.error('Boot failed:', err.message);
+  process.exit(1);
 });

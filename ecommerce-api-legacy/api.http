@@ -1,6 +1,7 @@
 @baseUrl = http://localhost:3000
+@adminToken = test-admin-token
 
-### Checkout - sucesso
+### Checkout - sucesso (rota pública)
 POST {{baseUrl}}/api/checkout
 Content-Type: application/json
 
@@ -12,7 +13,7 @@ Content-Type: application/json
   "card": "4111222233334444"
 }
 
-### Checkout - pagamento recusado
+### Checkout - pagamento recusado (rota pública)
 POST {{baseUrl}}/api/checkout
 Content-Type: application/json
 
@@ -24,8 +25,10 @@ Content-Type: application/json
   "card": "5111222233334444"
 }
 
-### Relatório financeiro administrativo
+### Relatório financeiro administrativo (requer X-Admin-Token)
 GET {{baseUrl}}/api/admin/financial-report
+X-Admin-Token: {{adminToken}}
 
-### Deletar usuário
+### Deletar usuário (requer X-Admin-Token)
 DELETE {{baseUrl}}/api/users/1
+X-Admin-Token: {{adminToken}}
