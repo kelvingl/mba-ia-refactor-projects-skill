@@ -83,7 +83,7 @@ Ao imprimir esse bloco, siga imediatamente para a Fase 2 — não pare aqui.
 **Ao escrever o relatório:**
 - Ordene os findings por severidade (CRITICAL → HIGH → MEDIUM → LOW) e, dentro da mesma severidade, por arquivo/linha.
 - Siga o template de `references/report-template.md` à risca — título, descrição, impacto e recomendação por finding.
-- Imprima o relatório no console **e** salve o mesmo conteúdo em `reports/audit-project-N.md` (N = 1 para code-smells-project, 2 para ecommerce-api-legacy, 3 para task-manager-api; crie `reports/` no diretório pai do projeto se não existir). Se não conseguir inferir N com segurança, pergunte ao usuário antes de salvar.
+- Imprima o relatório no console **e** salve o mesmo conteúdo em `reports/<nome-do-projeto>/audit.md` onde ( <nome-do-projeto> = code-smells-project|ecommerce-api-legacy|task-manager-api; crie `reports/` no diretório pai do projeto se não existir). Se não conseguir inferir o nome do projeto com segurança, pergunte ao usuário antes de salvar.
 
 **Depois de imprimir o relatório:**
 - Imprima literalmente a linha `Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]` e **pare** — não escreva mais nada, não modifique nenhum arquivo de código.
